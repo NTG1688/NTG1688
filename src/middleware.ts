@@ -34,39 +34,52 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+  const demoRoleCookie = request.cookies.get("ntg_role")?.value;
 
   // Các route công khai không cần đăng nhập
   const publicPaths = ["/", "/login", "/register", "/forgot-password"];
   const isPublicPath = publicPaths.includes(pathname);
   const isApiPath = pathname.startsWith("/api/");
 
+  const isAuthenticated = !!user || !!demoRoleCookie;
+
   // Nếu chưa đăng nhập và truy cập route cần auth → redirect về /login
-  if (!user && !isPublicPath && !isApiPath) {
+  if (!isAuthenticated && !isPublicPath && !isApiPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
     return NextResponse.redirect(url);
   }
 
-  // Nếu đã đăng nhập và truy cập login/register → redirect về dashboard
-  if (user && (pathname === "/login" || pathname === "/register")) {
+  // Nếu đã đăng nhập và truy cập login/register → redirect về dashboard thích hợp
+  if (isAuthenticated && (pathname === "/login" || pathname === "/register")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    if (demoRoleCookie === "admin") {
+      url.pathname = "/admin/dashboard";
+    } else {
+      url.pathname = "/dashboard";
+    }
     return NextResponse.redirect(url);
   }
 
   // Admin routes: kiểm tra quyền admin/staff
-  if (user && pathname.startsWith("/admin")) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+  if (pathname.startsWith("/admin")) {
+    if (demoRoleCookie === "admin") {
+      return supabaseResponse;
+    }
 
-    if (!profile || (profile.role !== "admin" && profile.role !== "staff")) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile || (profile.role !== "admin" && profile.role !== "staff")) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        return NextResponse.redirect(url);
+      }
     }
   }
 
