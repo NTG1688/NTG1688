@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { OrderStatusBadge } from "@/components/dashboard/OrderStatusBadge";
@@ -14,16 +14,20 @@ import {
   CheckCircle2, 
   Copy, 
   Download,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from "lucide-react";
 import { OrderStatus } from "@/types";
+import { createClient } from "@/lib/supabase/client";
 
 export default function OrderDetailPage() {
   const params = useParams();
-  const orderId = params.id as string;
+  const orderId = params?.id as string;
+  const supabase = createClient();
+  const [loading, setLoading] = useState(true);
 
-  // Dữ liệu chi tiết đơn hàng mẫu MD2596 bóc tách từ API thực tế
-  const orderData = {
+  // Dữ liệu chi tiết đơn hàng
+  const [order, setOrder] = useState<any>({
     id: "2596",
     order_code: "MD2596",
     status: 0 as OrderStatus,
@@ -36,7 +40,7 @@ export default function OrderDetailPage() {
     remaining_amount: 42520111,
     receive_place: "Kho Hà Nội",
     contract_type: "Chính ngạch Ủy Thác",
-    supplier_name: "TNHH ABC",
+    supplier_name: "TNHH Cơ Khí Quảng Châu",
     items: [
       {
         id: "10964",
@@ -78,7 +82,77 @@ export default function OrderDetailPage() {
       { step: "Kho VN nhận hàng", time: "Đang chờ", done: false },
       { step: "Giao hàng thành công", time: "Đang chờ", done: false },
     ],
-  };
+  });
+
+  useEffect(() => {
+    async function fetchOrder() {
+      if (!orderId) return;
+      try {
+        const { data: dbOrder } = await supabase
+          .from("orders")
+          .select("*, order_items(*), declarations(*)")
+          .or(`id.eq.${orderId},order_code.eq.${orderId}`)
+          .maybeSingle();
+
+        if (dbOrder) {
+          const items = (dbOrder.order_items || []).map((it: any) => ({
+            id: it.id,
+            title: it.title,
+            property: it.property_desc || "Mặc định",
+            quantity: it.quantity,
+            price_cny: Number(it.price_cny),
+            total_cny: Number(it.price_cny) * it.quantity,
+            image_url: it.image_url || "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=150&q=80",
+            note: it.customer_note || "",
+          }));
+
+          const dec = dbOrder.declarations?.[0];
+
+          setOrder({
+            id: dbOrder.id,
+            order_code: dbOrder.order_code,
+            status: dbOrder.status as OrderStatus,
+            created_at: dbOrder.created_at,
+            exchange_rate: Number(dbOrder.exchange_rate || 4015),
+            total_cny: Number(dbOrder.total_cny || 0),
+            total_vnd: Number(dbOrder.total_vnd || 0),
+            deposit_amount: Number(dbOrder.deposit_amount || 0),
+            min_deposit_amount: Number(dbOrder.min_deposit_amount || 0),
+            remaining_amount: Number(dbOrder.remaining_amount || 0),
+            receive_place: "Kho Hà Nội",
+            contract_type: dbOrder.contract_type || "Tiểu ngạch",
+            supplier_name: "Nhà cung cấp Trung Quốc",
+            items: items.length > 0 ? items : order.items,
+            declaration: dec ? {
+              ma_kb: dec.declaration_code,
+              hs_code: dec.hs_code || "8479.89.90",
+              description: dec.product_description,
+              unit: dec.unit || "PCE",
+              quantity: dec.quantity,
+              tax_vat_rate: Number(dec.tax_vat_rate || 8),
+              tax_nk_rate: Number(dec.tax_nk_rate || 0),
+              fee_utnk: Number(dec.specialized_fee || 1200000),
+            } : order.declaration,
+            timeline: [
+              { step: "Tạo đơn hàng", time: formatDate(dbOrder.created_at), done: true },
+              { step: "Đặt cọc đơn hàng", time: dbOrder.status >= 1 ? "Đã cọc" : "Chờ cọc", done: dbOrder.status >= 1 },
+              { step: "Nhân viên mua hàng", time: dbOrder.status >= 6 ? "Đã mua" : "Đang chờ", done: dbOrder.status >= 6 },
+              { step: "Shop TQ phát hàng", time: dbOrder.status >= 7 ? "Đã phát" : "Đang chờ", done: dbOrder.status >= 7 },
+              { step: "Kho TQ nhận hàng", time: dbOrder.status >= 9 ? "Đã nhận" : "Đang chờ", done: dbOrder.status >= 9 },
+              { step: "Kho VN nhận hàng", time: dbOrder.status >= 11 ? "Đã về kho" : "Đang chờ", done: dbOrder.status >= 11 },
+              { step: "Giao hàng thành công", time: dbOrder.status === 14 ? "Hoàn thành" : "Đang chờ", done: dbOrder.status === 14 },
+            ],
+          });
+        }
+      } catch (err) {
+        console.warn("Could not fetch order detail:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchOrder();
+  }, [orderId]);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -94,152 +168,194 @@ export default function OrderDetailPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight font-mono">
-                {orderData.order_code}
+                {order.order_code}
               </h1>
-              <OrderStatusBadge status={orderData.status} />
+              <OrderStatusBadge status={order.status} />
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
-              Ngày tạo: {formatDate(orderData.created_at)} · Tỷ giá: {orderData.exchange_rate.toLocaleString()} đ/¥
+              Tạo lúc {formatDate(order.created_at)} · Loại HĐ: <span className="font-semibold text-gray-700">{order.contract_type}</span>
             </p>
           </div>
         </div>
 
-        {orderData.status === 0 && (
-          <button className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-amber-600/20 transition-all">
-            Đặt Cọc Ngay ({formatVND(orderData.min_deposit_amount)})
+        {order.status === 0 && (
+          <button className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-bold rounded-2xl shadow-md transition-all self-start sm:self-auto cursor-pointer">
+            Đặt Cọc Ngay ({formatVND(order.min_deposit_amount)})
           </button>
         )}
       </div>
 
-      {/* Tiến độ đơn hàng (Timeline) */}
-      <div className="p-5 bg-white rounded-3xl border border-gray-200 shadow-xs">
-        <h3 className="font-bold text-sm text-gray-900 mb-4">Lộ Trình Đơn Hàng</h3>
+      {/* Progress Timeline */}
+      <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs">
+        <h3 className="font-bold text-sm text-gray-900 mb-6">Tiến Độ Xử Lý Đơn Hàng (14 Trạng Thái)</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-center">
-          {orderData.timeline.map((step, idx) => (
-            <div
-              key={idx}
-              className={`p-3 rounded-2xl border text-xs ${
-                step.done
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-800 font-bold"
-                  : "bg-gray-50 border-gray-100 text-gray-400"
-              }`}
-            >
+          {order.timeline.map((item: any, idx: number) => (
+            <div key={idx} className="flex flex-col items-center">
               <div
-                className={`w-6 h-6 mx-auto rounded-full flex items-center justify-center text-[10px] mb-2 font-black ${
-                  step.done ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-500"
+                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs mb-2 transition-all ${
+                  item.done
+                    ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-4 ring-emerald-50"
+                    : "bg-gray-100 text-gray-400 border border-gray-200"
                 }`}
               >
-                {idx + 1}
+                {item.done ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
               </div>
-              <span className="block leading-tight">{step.step}</span>
-              <span className="text-[10px] block opacity-75 mt-1 font-normal">{step.time}</span>
+              <span className={`text-xs font-bold ${item.done ? "text-gray-900" : "text-gray-400"}`}>
+                {item.step}
+              </span>
+              <span className="text-[10px] text-gray-400 mt-0.5">{item.time}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Grid: 2 columns (Danh sách sản phẩm & Thông tin tài chính + Hải quan) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left (2 cols): Danh sách sản phẩm */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white rounded-3xl border border-gray-200 p-5 shadow-xs">
-            <h3 className="font-bold text-sm text-gray-900 mb-4">Sản Phẩm Trong Đơn ({orderData.items.length})</h3>
+        {/* Left Column: Products & Declaration */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Products List */}
+          <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs space-y-4">
+            <h3 className="font-bold text-base text-gray-900 pb-3 border-b border-gray-100">
+              Danh Sách Sản Phẩm Trong Đơn ({order.items.length})
+            </h3>
+
             <div className="divide-y divide-gray-100">
-              {orderData.items.map((item) => (
-                <div key={item.id} className="py-4 flex gap-4 first:pt-0 last:pb-0">
+              {order.items.map((item: any) => (
+                <div key={item.id} className="py-4 first:pt-0 last:pb-0 flex items-start gap-4">
                   <img
                     src={item.image_url}
                     alt={item.title}
                     className="w-20 h-20 object-cover rounded-2xl border border-gray-100 shrink-0"
                   />
-                  <div className="flex-1">
-                    <h4 className="text-xs sm:text-sm font-bold text-gray-900 leading-tight">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-xs sm:text-sm text-gray-900 line-clamp-2">
                       {item.title}
                     </h4>
-                    <p className="text-xs text-gray-400 mt-1">Phân loại: {item.property}</p>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs text-gray-500">
-                        {item.quantity} x {formatCNY(item.price_cny)}
-                      </span>
-                      <span className="font-bold text-gray-900 text-sm">
-                        {formatCNY(item.total_cny)} ({formatVND(item.total_cny * orderData.exchange_rate)})
-                      </span>
-                    </div>
+                    <span className="inline-block mt-1 text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+                      {item.property}
+                    </span>
+                    {item.note && (
+                      <p className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-xl mt-2">
+                        Ghi chú: {item.note}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="font-bold text-sm text-gray-900 block font-mono">
+                      {formatCNY(item.price_cny)}
+                    </span>
+                    <span className="text-xs text-gray-400 block">x{item.quantity}</span>
+                    <span className="font-black text-brand-700 text-sm block mt-1 font-mono">
+                      {formatCNY(item.total_cny)}
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Module Tờ Khai Hải Quan Chính Ngạch */}
-          <div className="bg-white rounded-3xl border border-purple-200/80 p-5 shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-purple-600" />
-                <h3 className="font-bold text-sm text-gray-900">Tờ Khai Hải Quan & Phân Bổ Thuế (NKCN)</h3>
+          {/* Module Hải Quan Chính Ngạch (NKCN) */}
+          {order.declaration && (
+            <div className="bg-white rounded-3xl border border-purple-200/80 p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-purple-100">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-purple-50 text-purple-700 rounded-xl">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm text-gray-900">
+                      Tờ Khai Hải Quan & Thuế Nhập Khẩu Chính Ngạch (NKCN)
+                    </h3>
+                    <p className="text-[11px] text-gray-400">
+                      Chứng từ thông quan hợp quy pháp lý đứng tên Nam Trung Logistics
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold font-mono">
+                  {order.declaration.ma_kb}
+                </span>
               </div>
-              <span className="text-xs px-2.5 py-0.5 bg-purple-100 text-purple-800 rounded-full font-bold">
-                {orderData.declaration.ma_kb}
-              </span>
-            </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <span className="text-gray-400 block text-[11px]">Mã HS Code</span>
-                <span className="font-mono font-bold text-gray-800">{orderData.declaration.hs_code}</span>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <span className="text-gray-400 block text-[11px]">Thuế VAT NK</span>
-                <span className="font-bold text-gray-800">{orderData.declaration.tax_vat_rate}%</span>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <span className="text-gray-400 block text-[11px]">Thuế Nhập Khẩu</span>
-                <span className="font-bold text-gray-800">{orderData.declaration.tax_nk_rate}%</span>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <span className="text-gray-400 block text-[11px]">Phí Ủy Thác NK</span>
-                <span className="font-bold text-gray-800">{formatVND(orderData.declaration.fee_utnk)}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <span className="text-gray-400 block">Mã HS Code:</span>
+                  <span className="font-mono font-bold text-purple-800 text-sm">
+                    {order.declaration.hs_code}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block">Thuế Nhập Khẩu:</span>
+                  <span className="font-bold text-gray-800">{order.declaration.tax_nk_rate}%</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block">Thuế VAT:</span>
+                  <span className="font-bold text-gray-800">{order.declaration.tax_vat_rate}%</span>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-gray-400 block">Mô tả hàng hóa hải quan:</span>
+                  <span className="font-medium text-gray-800">{order.declaration.description}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block">Phí ủy thác nhập khẩu:</span>
+                  <span className="font-bold text-emerald-700 font-mono">
+                    {formatVND(order.declaration.fee_utnk)}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Right (1 col): Bảng kê tài chính */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-3xl border border-gray-200 p-5 shadow-xs space-y-3 text-xs">
-            <h3 className="font-bold text-sm text-gray-900 border-b border-gray-100 pb-3">Tổng Hợp Chi Phí</h3>
+        {/* Right Column: Financial Summary */}
+        <div className="space-y-6">
+          <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs space-y-4">
+            <h3 className="font-bold text-base text-gray-900 pb-3 border-b border-gray-100">
+              Chi Tiết Tài Chính
+            </h3>
 
-            <div className="flex justify-between text-gray-500">
-              <span>Tiền hàng (CNY):</span>
-              <span className="font-semibold text-gray-800">{formatCNY(orderData.total_cny)}</span>
-            </div>
-
-            <div className="flex justify-between text-gray-500">
-              <span>Tiền hàng quy đổi (VNĐ):</span>
-              <span className="font-semibold text-gray-800">{formatVND(orderData.total_cny * orderData.exchange_rate)}</span>
-            </div>
-
-            <div className="flex justify-between text-gray-500">
-              <span>Phí mua hàng:</span>
-              <span className="font-semibold text-gray-800">{formatVND(50000)}</span>
-            </div>
-
-            <div className="flex justify-between text-gray-500">
-              <span>Phí ủy thác nhập khẩu:</span>
-              <span className="font-semibold text-gray-800">{formatVND(orderData.declaration.fee_utnk)}</span>
-            </div>
-
-            <div className="pt-3 border-t border-gray-100 flex justify-between items-center">
-              <span className="font-bold text-gray-900 text-sm">Tổng thanh toán:</span>
-              <span className="font-extrabold text-brand-700 text-base">{formatVND(orderData.total_vnd)}</span>
-            </div>
-
-            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 mt-3">
-              <div className="flex justify-between font-bold text-amber-900">
-                <span>Cọc tối thiểu:</span>
-                <span>{formatVND(orderData.min_deposit_amount)}</span>
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between text-gray-500">
+                <span>Tổng giá trị hàng (CNY):</span>
+                <span className="font-mono font-bold text-gray-900">{formatCNY(order.total_cny)}</span>
               </div>
-              <p className="text-[10px] text-amber-700 mt-0.5">Cần đặt cọc để nhân viên tiến hành mua hàng</p>
+
+              <div className="flex justify-between text-gray-500">
+                <span>Tỷ giá áp dụng:</span>
+                <span className="font-mono font-bold text-gray-900">{order.exchange_rate.toLocaleString()} đ/CNY</span>
+              </div>
+
+              <div className="flex justify-between text-gray-500">
+                <span>Tổng tiền hàng (VNĐ):</span>
+                <span className="font-mono font-bold text-gray-900">
+                  {formatVND(order.total_cny * order.exchange_rate)}
+                </span>
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex justify-between items-baseline">
+                <span className="font-bold text-gray-900 text-sm">Tổng Đơn Hàng:</span>
+                <span className="font-mono font-black text-brand-700 text-lg">
+                  {formatVND(order.total_vnd)}
+                </span>
+              </div>
+
+              <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-1.5">
+                <div className="flex justify-between text-emerald-800">
+                  <span>Đã thanh toán / cọc:</span>
+                  <span className="font-mono font-bold">{formatVND(order.deposit_amount)}</span>
+                </div>
+                <div className="flex justify-between text-emerald-900 font-bold">
+                  <span>Còn thiếu cần thanh toán:</span>
+                  <span className="font-mono">{formatVND(order.remaining_amount)}</span>
+                </div>
+              </div>
+
+              {order.status === 0 && (
+                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-amber-800">
+                  <span className="font-bold block">Yêu cầu đặt cọc tối thiểu (70%):</span>
+                  <span className="font-mono font-black text-base text-amber-900 block mt-0.5">
+                    {formatVND(order.min_deposit_amount)}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

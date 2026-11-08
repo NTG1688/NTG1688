@@ -124,6 +124,20 @@ export interface Package {
   created_at: string;
 }
 
+export interface BigPackage {
+  id: string;
+  code: string; // VD: xachtay1708, BAO-HN-001
+  warehouse_id: string;
+  total_weight_kg: number;
+  total_volume_cbm: number;
+  package_count: number;
+  status: 'packing' | 'in_transit' | 'arrived_vn' | 'unpacked';
+  vehicle_code?: string;
+  departure_date?: string;
+  arrival_date?: string;
+  created_at: string;
+}
+
 export interface Declaration {
   id: string;
   order_id: string;
@@ -153,6 +167,76 @@ export interface WalletTransaction {
   type: 'deposit' | 'withdrawal' | 'order_payment' | 'refund';
   order_id?: string;
   note?: string;
+  created_at: string;
+}
+
+export interface CartItem {
+  id: string;
+  user_id: string;
+  shop_id?: string;
+  shop_name: string;
+  item_title: string;
+  item_image?: string;
+  item_url: string;
+  properties?: string;
+  price_cny: number;
+  quantity: number;
+  note?: string;
+  is_check: boolean;
+  is_wood: boolean;
+  is_insurance: boolean;
+  selected: boolean;
+  created_at: string;
+}
+
+export interface PayService {
+  id: string;
+  pay_code: string;
+  user_id: string;
+  alipay_account: string;
+  total_cny: number;
+  exchange_rate: number;
+  fee_cny: number;
+  total_vnd: number;
+  qr_image_url?: string;
+  note?: string;
+  status: 'pending' | 'processing' | 'completed' | 'cancelled';
+  payment_transaction_id?: string;
+  assigned_staff_id?: string;
+  created_at: string;
+  completed_at?: string;
+}
+
+export interface Complaint {
+  id: string;
+  complaint_code: string;
+  user_id: string;
+  order_id?: string;
+  package_id?: string;
+  type: 'broken' | 'wrong_item' | 'missing' | 'slow' | 'other';
+  title: string;
+  content: string;
+  images: string[];
+  refund_requested_cny: number;
+  refund_requested_vnd: number;
+  refund_approved_vnd: number;
+  status: 'pending' | 'investigating' | 'accepted' | 'rejected' | 'completed';
+  admin_response?: string;
+  created_at: string;
+}
+
+export interface ExportReceipt {
+  id: string;
+  receipt_code: string;
+  customer_id: string;
+  receiver_name: string;
+  receiver_phone: string;
+  delivery_address: string;
+  shipping_carrier?: string;
+  total_packages: number;
+  total_weight_kg: number;
+  shipping_fee_vnd: number;
+  status: 'pending' | 'delivering' | 'delivered';
   created_at: string;
 }
 

@@ -4,19 +4,23 @@ import React, { useState, useRef } from "react";
 import { Upload, X, Check, Image as ImageIcon, Loader2 } from "lucide-react";
 
 interface Props {
-  onUploadComplete: (url: string) => void;
-  folder?: "orders" | "declarations" | "avatars" | "receipts";
+  onUploadComplete?: (url: string) => void;
+  onImageUploaded?: (url: string) => void;
+  folder?: string;
   initialUrl?: string;
+  currentImageUrl?: string;
   className?: string;
 }
 
 export const ImageUploader: React.FC<Props> = ({
   onUploadComplete,
+  onImageUploaded,
   folder = "orders",
   initialUrl = "",
+  currentImageUrl = "",
   className = "",
 }) => {
-  const [imageUrl, setImageUrl] = useState<string>(initialUrl);
+  const [imageUrl, setImageUrl] = useState<string>(currentImageUrl || initialUrl);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,18 +68,21 @@ export const ImageUploader: React.FC<Props> = ({
         // Fallback: nếu CORS chưa cấu hình trên R2, tạm dùng Object URL xem trước
         const localPreview = URL.createObjectURL(file);
         setImageUrl(localPreview);
-        onUploadComplete(data.publicUrl);
+        onUploadComplete?.(data.publicUrl);
+        onImageUploaded?.(data.publicUrl);
         return;
       }
 
       setImageUrl(data.publicUrl);
-      onUploadComplete(data.publicUrl);
+      onUploadComplete?.(data.publicUrl);
+      onImageUploaded?.(data.publicUrl);
     } catch (err: any) {
       console.warn("Upload R2 notice:", err.message);
       // Giữ trải nghiệm mượt mà bằng local preview
       const localPreview = URL.createObjectURL(file);
       setImageUrl(localPreview);
-      onUploadComplete(localPreview);
+      onUploadComplete?.(localPreview);
+      onImageUploaded?.(localPreview);
     } finally {
       setIsUploading(false);
     }
@@ -84,7 +91,8 @@ export const ImageUploader: React.FC<Props> = ({
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
     setImageUrl("");
-    onUploadComplete("");
+    onUploadComplete?.("");
+    onImageUploaded?.("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 

@@ -121,10 +121,13 @@ export const Navbar: React.FC<Props> = ({
 
           {/* Thông Báo */}
           {user && (
-            <button className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors">
+            <Link
+              href="/notifications"
+              className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+            >
               <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
-            </button>
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
+            </Link>
           )}
 
           {/* User Profile Badge or Login/Register Links */}

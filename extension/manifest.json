@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Nam Trung Logistics (NTG1688) - Công Cụ Đặt Hàng Taobao, 1688, Tmall",
+  "version": "2.0.0",
+  "description": "Tiện ích đặt hàng trực tiếp từ Taobao, 1688, Tmall vào giỏ hàng hệ thống Nam Trung Logistics (NTG1688).",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icons/icon48.png",
+    "default_title": "Nam Trung Logistics (NTG1688)"
+  },
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.taobao.com/*",
+    "*://*.1688.com/*",
+    "*://*.tmall.com/*",
+    "*://*.tmall.hk/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.taobao.com/*",
+        "*://*.1688.com/*",
+        "*://*.tmall.com/*",
+        "*://*.tmall.hk/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

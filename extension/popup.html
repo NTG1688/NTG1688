@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Nam Trung Logistics (NTG1688)</title>
+  <style>
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #ffffff;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #2563eb, #4f46e5);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 14px;
+    }
+    .title {
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .subtitle {
+      font-size: 10px;
+      color: #94a3b8;
+      text-transform: uppercase;
+    }
+    .card {
+      background: #1e293b;
+      padding: 12px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+    .rate-title {
+      font-size: 11px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .rate-val {
+      font-size: 20px;
+      font-weight: 900;
+      color: #38bdf8;
+      font-family: monospace;
+      margin-top: 4px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px;
+      text-align: center;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 700;
+      font-size: 12px;
+      border-radius: 10px;
+      text-decoration: none;
+      margin-bottom: 8px;
+    }
+    .btn:hover {
+      background: #1d4ed8;
+    }
+    .btn-secondary {
+      background: #334155;
+    }
+    .btn-secondary:hover {
+      background: #475569;
+    }
+    .footer {
+      text-align: center;
+      font-size: 10px;
+      color: #64748b;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">NTG</div>
+    <div>
+      <div class="title">NAM TRUNG LOGISTICS</div>
+      <div class="subtitle">Tiện Ích Đặt Hàng 1688 / Taobao</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="rate-title">Tỷ Giá Tệ Hôm Nay</div>
+    <div class="rate-val">1 CNY = 4,015 VNĐ</div>
+  </div>
+
+  <a href="http://localhost:3000/cart" target="_blank" class="btn">
+    🛒 Xem Giỏ Hàng Nam Trung
+  </a>
+
+  <a href="http://localhost:3000/dashboard" target="_blank" class="btn btn-secondary">
+    📊 Mở Cổng Khách Hàng
+  </a>
+
+  <div class="footer">
+    Bảo mật & sở hữu bởi Nam Trung Logistics
+  </div>
+</body>
+</html>
