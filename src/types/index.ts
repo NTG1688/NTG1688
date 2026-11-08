@@ -44,26 +44,44 @@ export interface Order {
   customer_id: string;
   sale_id?: string;
   buyer_id?: string;
+  purchaser_id?: string;
+  sales_id?: string;
+  cskh_id?: string;
   status: OrderStatus;
   order_type: 'order' | 'deposit' | 'chinh_ngach';
   
+  // Tỷ giá & Tiền tệ
   exchange_rate: number;
+  real_exchange_rate?: number;
   total_cny: number;
   total_vnd: number;
+  total_cost_cny?: number;
+  total_cost_vnd?: number;
+  gross_profit_vnd?: number;
+  profit_rate_percent?: number;
+  
   deposit_amount: number;
   min_deposit_amount: number;
   remaining_amount: number;
+  paid_amount_vnd?: number;
+  is_second_payment_confirmed?: boolean;
+  second_payment_amount?: number;
   
+  // Chi tiết biểu phí thu khách
   fee_buy: number;
   fee_ship_cn_cny: number;
   fee_ship_cn_vnd: number;
+  real_ship_cn_cny?: number;
+  real_ship_cn_vnd?: number;
   fee_weight: number;
   fee_volume: number;
+  real_weight_fee_vnd?: number;
   fee_check: number;
   fee_wood: number;
   fee_insurance: number;
   fee_surcharge: number;
   
+  // Thuế & Nhập khẩu chính ngạch (NKCN)
   contract_type?: string;
   tax_vat_rate: number;
   tax_vat_amount: number;
@@ -72,9 +90,18 @@ export interface Order {
   fee_utnk: number;
   tax_hdtq_amount: number;
   
+  // Setup & Đàm phán
   shop_name?: string;
   shop_id?: string;
   site?: string;
+  china_order_id?: string;
+  alipay_transaction_id?: string;
+  bargain_discount_cny?: number;
+  total_weight_kg?: number;
+  total_cbm?: number;
+  chargeable_weight_kg?: number;
+  hashtags?: string[];
+  
   receive_warehouse_id?: string;
   customer_note?: string;
   internal_note?: string;
@@ -90,7 +117,64 @@ export interface Order {
   
   items?: OrderItem[];
   packages?: Package[];
+  tracking_codes?: OrderTrackingCode[];
+  financial_detail?: OrderFinancialDetail;
   declarations?: Declaration[];
+}
+
+export interface OrderTrackingCode {
+  id: string;
+  order_id: string;
+  tracking_code: string;
+  carrier_name?: string;
+  weight_kg: number;
+  cbm: number;
+  dimensions?: string;
+  status: 'shop_dispatched' | 'cn_received' | 'cn_exported' | 'vn_received' | 'vn_exported' | 'delivered';
+  package_code?: string;
+  vehicle_code?: string;
+  china_received_at?: string;
+  china_exported_at?: string;
+  vn_received_at?: string;
+  vn_exported_at?: string;
+  note?: string;
+  created_at: string;
+}
+
+export interface OrderFinancialDetail {
+  id: string;
+  order_id: string;
+  exchange_rate_selling: number;
+  exchange_rate_cost: number;
+  price_web_cny: number;
+  price_real_cny: number;
+  profit_bargain_cny: number;
+  ship_cn_selling_cny: number;
+  ship_cn_cost_cny: number;
+  profit_shipping_cn_vnd: number;
+  weight_kg_selling: number;
+  weight_price_per_kg_selling: number;
+  weight_cost_per_kg: number;
+  profit_international_shipping_vnd: number;
+  buying_fee_selling_vnd: number;
+  check_fee_selling_vnd: number;
+  wood_fee_selling_vnd: number;
+  insurance_fee_selling_vnd: number;
+  utnk_fee_selling_vnd: number;
+  customs_tax_selling_vnd: number;
+  additional_fee_selling_vnd: number;
+  wood_fee_cost_vnd: number;
+  check_fee_cost_vnd: number;
+  customs_tax_cost_vnd: number;
+  total_revenue_vnd: number;
+  total_cost_vnd: number;
+  gross_profit_vnd: number;
+  profit_rate_percent: number;
+  profit_exchange_rate_vnd: number;
+  deposit_amount_vnd: number;
+  second_payment_amount_vnd: number;
+  total_paid_vnd: number;
+  remaining_balance_vnd: number;
 }
 
 export interface OrderItem {
@@ -101,9 +185,15 @@ export interface OrderItem {
   product_link: string;
   properties?: string;
   quantity: number;
+  quantity_received?: number;
   price_cny: number;
+  price_real_cny?: number;
+  discount_cny?: number;
   total_cny: number;
+  total_cost_cny?: number;
+  weight_kg?: number;
   customer_note?: string;
+  internal_note?: string;
   status: number;
 }
 

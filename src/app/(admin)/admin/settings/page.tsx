@@ -9,20 +9,22 @@ import {
   Bell, 
   Save, 
   Check, 
-  RefreshCw,
-  ShieldAlert,
-  Server,
-  Loader2,
-  AlertCircle,
-  Users,
-  Trash2
+  RefreshCw, 
+  ShieldAlert, 
+  Server, 
+  Loader2, 
+  AlertCircle, 
+  Users, 
+  Trash2,
+  Truck,
+  Tag
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatVND } from "@/lib/utils";
 
 export default function AdminSettingsPage() {
   const supabase = createClient();
-  const [activeTab, setActiveTab] = useState<"r2" | "exchange" | "bank" | "customers">("r2");
+  const [activeTab, setActiveTab] = useState<"r2" | "exchange" | "shipping" | "hashtags" | "bank" | "customers">("r2");
   const [isSaving, setIsSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [isTestingR2, setIsTestingR2] = useState(false);
@@ -41,12 +43,36 @@ export default function AdminSettingsPage() {
   // State Tỷ giá
   const [exchangeConfig, setExchangeConfig] = useState({
     rate: 4015,
+    realRate: 3955, // Tỷ giá vốn mua vào
     minBuyFee: 50000,
     buyFeePercent: 3,
     checkFeePerItem: 2000,
     insurancePercent: 3,
     depositPercent: 70,
   });
+
+  // State Bảng giá vận chuyển bậc thang
+  const [shippingTiers, setShippingTiers] = useState([
+    { id: "1", type: "weight", minVal: 0, maxVal: 10, priceVnd: 32000, dest: "Kho Hà Nội" },
+    { id: "2", type: "weight", minVal: 10, maxVal: 50, priceVnd: 28000, dest: "Kho Hà Nội" },
+    { id: "3", type: "weight", minVal: 50, maxVal: 100, priceVnd: 25000, dest: "Kho Hà Nội" },
+    { id: "4", type: "weight", minVal: 100, maxVal: 500, priceVnd: 22000, dest: "Kho Hà Nội" },
+    { id: "5", type: "volume", minVal: 0, maxVal: 999, priceVnd: 3500000, dest: "Kho Hà Nội" },
+    { id: "6", type: "weight", minVal: 0, maxVal: 50, priceVnd: 34000, dest: "Kho TP. Hồ Chí Minh" },
+    { id: "7", type: "weight", minVal: 50, maxVal: 500, priceVnd: 29000, dest: "Kho TP. Hồ Chí Minh" },
+    { id: "8", type: "volume", minVal: 0, maxVal: 999, priceVnd: 4200000, dest: "Kho TP. Hồ Chí Minh" },
+  ]);
+
+  // State Danh sách Hashtags
+  const [hashtagsList, setHashtagsList] = useState([
+    { tag: "#HangDeVo", color: "#EF4444", desc: "Hàng dễ vỡ, yêu cầu đóng gỗ" },
+    { tag: "#ChotTTLan2", color: "#F59E0B", desc: "Đã chốt thanh toán lần 2 khi về kho VN" },
+    { tag: "#HangGiaTriCao", color: "#8B5CF6", desc: "Hàng giá trị cao cần mua bảo hiểm" },
+    { tag: "#HangPin", color: "#3B82F6", desc: "Hàng có pin, hóa chất hoặc nam châm" },
+    { tag: "#HoaToc", color: "#EC4899", desc: "Ưu tiên vận chuyển hỏa tốc" },
+    { tag: "#CanDongGo", color: "#10B981", desc: "Kho TQ kiểm tra đóng kiện gỗ" },
+    { tag: "#CanKiemDem", color: "#6366F1", desc: "Yêu cầu đếm từng chi tiết sản phẩm" }
+  ]);
 
   // State Ngân hàng VietQR
   const [bankConfig, setBankConfig] = useState({
@@ -263,6 +289,8 @@ export default function AdminSettingsPage() {
         {[
           { key: "r2" as const, icon: Cloud, label: "Cloudflare R2 Storage" },
           { key: "exchange" as const, icon: DollarSign, label: "Tỷ Giá & Biểu Phí" },
+          { key: "shipping" as const, icon: Truck, label: "Bảng Giá Vận Chuyển Bậc Thang" },
+          { key: "hashtags" as const, icon: Tag, label: "Quản Lý Hashtags Đơn Hàng" },
           { key: "bank" as const, icon: CreditCard, label: "VietQR & Ngân Hàng" },
           { key: "customers" as const, icon: Users, label: "Quản Lý Khách Hàng" },
         ].map((tab) => (
@@ -371,12 +399,21 @@ export default function AdminSettingsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="text-xs font-bold text-gray-700 block mb-1">Tỷ Giá 1 Tệ (VND/CNY)</label>
+              <label className="text-xs font-bold text-gray-700 block mb-1">Tỷ Giá Bán Thu Khách (VND/CNY)</label>
               <input
                 type="number"
                 value={exchangeConfig.rate}
                 onChange={(e) => setExchangeConfig({ ...exchangeConfig, rate: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-blue-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-gray-700 block mb-1">Tỷ Giá Vốn Mua Vào (VND/CNY)</label>
+              <input
+                type="number"
+                value={exchangeConfig.realRate}
+                onChange={(e) => setExchangeConfig({ ...exchangeConfig, realRate: parseFloat(e.target.value) || 0 })}
+                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
             <div>
@@ -429,6 +466,84 @@ export default function AdminSettingsPage() {
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-blue-600" />
             <span>Mọi thay đổi được lưu vào bảng <code className="font-mono bg-blue-100 px-1 rounded">system_settings</code> trên Supabase. Tất cả trang khách hàng sẽ đọc giá trị mới nhất khi tải.</span>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Bảng Giá Vận Chuyển Bậc Thang */}
+      {activeTab === "shipping" && (
+        <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs max-w-4xl space-y-5">
+          <div className="pb-4 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-base text-gray-900">Bảng Giá Cước Vận Chuyển Bậc Thang Trung Quốc - Việt Nam</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Cấu hình đơn giá cước tính theo kg hoặc mét khối (m3) áp dụng theo từng tổng kho đích.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-gray-50 text-gray-600 uppercase border-b border-gray-200">
+                <tr>
+                  <th className="p-3">Kho Đích Đến</th>
+                  <th className="p-3">Loại Tính Cước</th>
+                  <th className="p-3">Mức Min</th>
+                  <th className="p-3">Mức Max</th>
+                  <th className="p-3 text-right">Đơn Giá Cước (VNĐ)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {shippingTiers.map((tier, idx) => (
+                  <tr key={tier.id || idx} className="hover:bg-gray-50">
+                    <td className="p-3 font-semibold text-gray-900">{tier.dest}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                        tier.type === "weight" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"
+                      }`}>
+                        {tier.type === "weight" ? "Cân nặng (kg)" : "Thể tích (m³)"}
+                      </span>
+                    </td>
+                    <td className="p-3 font-medium text-gray-700">{tier.minVal} {tier.type === "weight" ? "kg" : "m³"}</td>
+                    <td className="p-3 font-medium text-gray-700">{tier.maxVal} {tier.type === "weight" ? "kg" : "m³"}</td>
+                    <td className="p-3 text-right font-mono font-bold text-blue-700">
+                      {formatVND(tier.priceVnd)} / {tier.type === "weight" ? "kg" : "m³"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Quản Lý Hashtags */}
+      {activeTab === "hashtags" && (
+        <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs max-w-4xl space-y-5">
+          <div className="pb-4 border-b border-gray-100">
+            <h3 className="font-bold text-base text-gray-900">Danh Mục Thẻ Hashtag Đơn Hàng</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Các thẻ phân loại nghiệp vụ sử dụng để gắn vào đơn hàng (ví dụ: Hàng dễ vỡ, Hàng pin, Chốt TT lần 2).
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {hashtagsList.map((ht) => (
+              <div key={ht.tag} className="p-4 border border-gray-200 rounded-2xl flex items-center justify-between hover:bg-gray-50 transition">
+                <div className="flex items-center gap-3">
+                  <span
+                    style={{ backgroundColor: `${ht.color}15`, color: ht.color, borderColor: `${ht.color}40` }}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold border"
+                  >
+                    {ht.tag}
+                  </span>
+                  <div>
+                    <div className="text-xs text-gray-700 font-medium">{ht.desc}</div>
+                    <div className="text-[10px] text-gray-400 font-mono">Mã màu: {ht.color}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
