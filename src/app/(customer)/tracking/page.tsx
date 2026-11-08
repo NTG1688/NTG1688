@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Search, MapPin, Package, Truck, CheckCircle2, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { orderStore } from "@/lib/order-store";
 
 interface TrackingResult {
   tracking_code: string;
@@ -54,6 +55,92 @@ function TrackingContent() {
     setHasSearched(true);
 
     try {
+      // 1. Kiểm tra trong orderStore trước (hỗ trợ cả tìm theo mã đơn hoặc mã vận đơn con)
+      const allOrders = orderStore.getOrders();
+      let matchedTracking: any = null;
+      let matchedOrder: any = null;
+
+      for (const order of allOrders) {
+        if (order.order_code.toLowerCase() === searchCode.toLowerCase()) {
+          matchedOrder = order;
+          matchedTracking = order.tracking_codes?.[0] || null;
+          break;
+        }
+        const tr = order.tracking_codes?.find(
+          (t) => t.tracking_code.toLowerCase() === searchCode.toLowerCase()
+        );
+        if (tr) {
+          matchedTracking = tr;
+          matchedOrder = order;
+          break;
+        }
+      }
+
+      if (matchedTracking || matchedOrder) {
+        const trCode = matchedTracking?.tracking_code || searchCode;
+        const ordCode = matchedOrder?.order_code || "MD2596";
+        const weight = Number(matchedTracking?.weight_kg || matchedOrder?.total_weight_kg || 0);
+        const carrier = matchedTracking?.carrier_name || "Chuyển phát nhanh TQ-VN";
+        const pkgCode = matchedTracking?.package_code || "Bao-xachtay1708";
+
+        const timeline: TrackingResult["timeline"] = [];
+        if (matchedTracking?.china_received_at || matchedOrder?.status >= 9) {
+          timeline.push({
+            title: `Kho Trung Quốc đã nhận hàng (${carrier})`,
+            location: "Kho Quảng Châu / Bằng Tường, Trung Quốc",
+            time: matchedTracking?.china_received_at ? new Date(matchedTracking.china_received_at).toLocaleString("vi-VN") : "18/10/2026 10:00",
+            current: matchedOrder?.status === 9,
+          });
+        }
+        if (matchedTracking?.china_exported_at || matchedOrder?.status >= 10) {
+          timeline.unshift({
+            title: `Đã đóng bao niêm phong [${pkgCode}] - Xuất kho TQ về Việt Nam`,
+            location: "Cửa khẩu Hữu Nghị / Tân Thanh",
+            time: matchedTracking?.china_exported_at ? new Date(matchedTracking.china_exported_at).toLocaleString("vi-VN") : "19/10/2026 14:00",
+            current: matchedOrder?.status === 10,
+          });
+        }
+        if (matchedTracking?.vn_received_at || matchedOrder?.status >= 11) {
+          timeline.unshift({
+            title: `Kho Việt Nam đã nhận hàng & phân loại kiểm đếm`,
+            location: matchedOrder?.receive_warehouse || "Kho Hà Nội, Việt Nam",
+            time: matchedTracking?.vn_received_at ? new Date(matchedTracking.vn_received_at).toLocaleString("vi-VN") : "20/10/2026 09:30",
+            current: matchedOrder?.status === 11 || matchedOrder?.status === 12,
+          });
+        }
+        if (matchedOrder?.status === 14) {
+          timeline.unshift({
+            title: "Đã giao hàng thành công cho khách hàng",
+            location: "Hoàn tất đơn hàng",
+            time: "21/10/2026 16:00",
+            current: true,
+          });
+        }
+
+        if (timeline.length === 0) {
+          timeline.push({
+            title: "Đơn hàng đã được tạo & chờ nhà cung cấp giao hàng nội địa",
+            location: "Hệ thống Nam Trung Logistics",
+            time: new Date().toLocaleString("vi-VN"),
+            current: true,
+          });
+        }
+
+        setTrackingResult({
+          tracking_code: trCode,
+          order_code: ordCode,
+          weight_kg: weight,
+          big_package: pkgCode,
+          destination: matchedOrder?.receive_warehouse || "Kho Hà Nội",
+          status: matchedOrder?.status >= 11 ? 3 : matchedOrder?.status >= 10 ? 2 : 1,
+          status_text: matchedOrder?.status >= 14 ? "Đã giao khách hàng" : matchedOrder?.status >= 11 ? "Đã về kho Việt Nam" : matchedOrder?.status >= 10 ? "Đang vận chuyển TQ-VN" : "Kho TQ đã nhận / Đang xử lý",
+          timeline,
+        });
+        setSearching(false);
+        return;
+      }
+
+      // 2. Tra cứu Supabase nếu có
       const { data: pkg, error } = await supabase
         .from("packages")
         .select("*, orders(order_code)")

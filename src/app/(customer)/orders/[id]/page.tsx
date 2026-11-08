@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { OrderStatus } from "@/types";
 import { createClient } from "@/lib/supabase/client";
+import { orderStore } from "@/lib/order-store";
 
 export default function CustomerOrderDetailPage() {
   const params = useParams();
@@ -145,97 +146,43 @@ export default function CustomerOrderDetailPage() {
   });
 
   useEffect(() => {
-    async function fetchOrder() {
+    function loadOrder() {
       if (!orderId) return;
-      try {
-        const { data: dbOrder } = await supabase
-          .from("orders")
-          .select("*, order_items(*), order_tracking_codes(*), declarations(*)")
-          .or(`id.eq.${orderId},order_code.eq.${orderId}`)
-          .maybeSingle();
-
-        if (dbOrder) {
-          const items = (dbOrder.order_items || []).map((it: any) => ({
-            id: it.id,
-            title: it.title,
-            property: it.properties || "Mặc định",
-            quantity: it.quantity,
-            price_cny: Number(it.price_cny),
-            total_cny: Number(it.price_cny) * it.quantity,
-            image_url: it.image_url || "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=150&q=80",
-            product_link: it.product_link,
-            note: it.customer_note || "",
-          }));
-
-          const dec = dbOrder.declarations?.[0];
-
-          setOrder((prev: any) => ({
-            ...prev,
-            id: dbOrder.id,
-            order_code: dbOrder.order_code,
-            status: dbOrder.status as OrderStatus,
-            created_at: dbOrder.created_at,
-            exchange_rate: Number(dbOrder.exchange_rate || 4015),
-            total_cny: Number(dbOrder.total_cny || prev.total_cny),
-            total_vnd: Number(dbOrder.total_vnd || prev.total_vnd),
-            deposit_amount: Number(dbOrder.deposit_amount || prev.deposit_amount),
-            min_deposit_amount: Number(dbOrder.min_deposit_amount || prev.min_deposit_amount),
-            paid_amount_vnd: Number(dbOrder.paid_amount_vnd || prev.paid_amount_vnd),
-            remaining_amount: Number(dbOrder.remaining_amount || prev.remaining_amount),
-            fee_buy: Number(dbOrder.fee_buy || prev.fee_buy),
-            fee_ship_cn_cny: Number(dbOrder.fee_ship_cn_cny || prev.fee_ship_cn_cny),
-            fee_ship_cn_vnd: Number(dbOrder.fee_ship_cn_vnd || prev.fee_ship_cn_vnd),
-            fee_weight: Number(dbOrder.fee_weight || prev.fee_weight),
-            fee_check: Number(dbOrder.fee_check || prev.fee_check),
-            fee_wood: Number(dbOrder.fee_wood || prev.fee_wood),
-            fee_insurance: Number(dbOrder.fee_insurance || prev.fee_insurance),
-            fee_utnk: Number(dbOrder.fee_utnk || prev.fee_utnk),
-            tax_vat_amount: Number(dbOrder.tax_vat_amount || prev.tax_vat_amount),
-            tax_nk_amount: Number(dbOrder.tax_nk_amount || prev.tax_nk_amount),
-            total_weight_kg: Number(dbOrder.total_weight_kg || prev.total_weight_kg),
-            chargeable_weight_kg: Number(dbOrder.chargeable_weight_kg || prev.chargeable_weight_kg),
-            contract_type: dbOrder.contract_type || prev.contract_type,
-            hashtags: dbOrder.hashtags && dbOrder.hashtags.length > 0 ? dbOrder.hashtags : prev.hashtags,
-            items: items.length > 0 ? items : prev.items,
-            tracking_codes: dbOrder.order_tracking_codes?.length > 0 ? dbOrder.order_tracking_codes.map((t: any) => ({
-              id: t.id,
-              tracking_code: t.tracking_code,
-              carrier_name: t.carrier_name,
-              weight_kg: t.weight_kg,
-              status: t.status,
-              status_label: t.status === "cn_received" ? "Đã nhập kho TQ" : t.status,
-              note: t.note
-            })) : prev.tracking_codes,
-            declaration: dec ? {
-              ma_kb: dec.declaration_code,
-              hs_code: dec.hs_code || "8479.89.90",
-              description: dec.product_description,
-              unit: dec.unit || "PCE",
-              quantity: dec.quantity,
-              tax_vat_rate: Number(dec.tax_vat_rate || 8),
-              tax_nk_rate: Number(dec.tax_nk_rate || 0),
-              fee_utnk: Number(dec.specialized_fee || 1200000),
-            } : prev.declaration,
-            timeline: [
-              { step: "Tạo đơn hàng", time: formatDate(dbOrder.created_at), done: true },
-              { step: "Đặt cọc đơn hàng", time: dbOrder.status >= 1 ? "Đã cọc" : "Chờ cọc", done: dbOrder.status >= 1 },
-              { step: "Nhân viên mua hàng", time: dbOrder.status >= 6 ? "Đã mua" : "Đang chờ", done: dbOrder.status >= 6 },
-              { step: "Shop TQ phát hàng", time: dbOrder.status >= 7 ? "Đã phát" : "Đang chờ", done: dbOrder.status >= 7 },
-              { step: "Kho TQ nhận hàng", time: dbOrder.status >= 9 ? "Đã nhận" : "Đang chờ", done: dbOrder.status >= 9 },
-              { step: "Kho VN nhận hàng", time: dbOrder.status >= 11 ? "Đã về kho" : "Đang chờ", done: dbOrder.status >= 11 },
-              { step: "Giao hàng thành công", time: dbOrder.status === 14 ? "Hoàn thành" : "Đang chờ", done: dbOrder.status === 14 },
-            ],
-          }));
-        }
-      } catch (err) {
-        console.warn("Could not fetch customer order:", err);
-      } finally {
+      const found = orderStore.getOrderById(orderId);
+      if (found) {
+        setOrder({
+          ...found,
+          receive_place: "Kho Hà Nội (Việt Nam)",
+          supplier_name: found.shop_name || "Nhà cung cấp Trung Quốc",
+          timeline: [
+            { step: "Tạo đơn hàng", time: formatDate(found.created_at), done: true },
+            { step: "Đặt cọc đơn hàng", time: found.status >= 1 ? "Đã cọc" : "Chờ cọc", done: found.status >= 1 },
+            { step: "Nhân viên mua hàng", time: found.status >= 6 ? "Đã mua" : "Đang chờ", done: found.status >= 6 },
+            { step: "Shop TQ phát hàng", time: found.status >= 7 ? "Đã phát" : "Đang chờ", done: found.status >= 7 },
+            { step: "Kho TQ nhận hàng", time: found.status >= 9 ? "Đã nhận" : "Đang chờ", done: found.status >= 9 },
+            { step: "Kho VN nhận hàng", time: found.status >= 11 ? "Đã về kho" : "Đang chờ", done: found.status >= 11 },
+            { step: "Giao hàng thành công", time: found.status === 14 ? "Hoàn thành" : "Đang chờ", done: found.status === 14 },
+          ],
+          declaration: found.declarations?.[0] ? {
+            ma_kb: found.declarations[0].declaration_code,
+            hs_code: found.declarations[0].hs_code || "8479.89.90",
+            description: found.declarations[0].product_description,
+            unit: found.declarations[0].unit || "PCE",
+            quantity: found.declarations[0].quantity,
+            tax_vat_rate: Number(found.declarations[0].tax_vat_rate || 8),
+            tax_nk_rate: Number(found.declarations[0].tax_nk_rate || 0),
+            fee_utnk: Number(found.declarations[0].specialized_fee || 1200000),
+          } : undefined
+        });
         setLoading(false);
       }
     }
 
-    fetchOrder();
-  }, [orderId, supabase]);
+    loadOrder();
+
+    window.addEventListener("NTG_ORDERS_UPDATED", loadOrder);
+    return () => window.removeEventListener("NTG_ORDERS_UPDATED", loadOrder);
+  }, [orderId]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(order.order_code);
@@ -246,16 +193,24 @@ export default function CustomerOrderDetailPage() {
   const handlePayFromWallet = async () => {
     setPayingWallet(true);
     try {
-      // Giả lập thanh toán trừ ví thành công
-      await new Promise((res) => setTimeout(res, 800));
-      setOrder({
-        ...order,
-        status: 1,
-        deposit_amount: order.min_deposit_amount,
-        remaining_amount: Math.max(0, order.total_vnd - order.min_deposit_amount)
-      });
-      setPaySuccess(true);
-      setTimeout(() => setPaySuccess(false), 4000);
+      const res = orderStore.payDepositWithWallet(order.id);
+      if (res.success && res.order) {
+        setOrder((prev: any) => ({
+          ...prev,
+          ...res.order,
+          timeline: [
+            { step: "Tạo đơn hàng", time: formatDate(res.order!.created_at), done: true },
+            { step: "Đặt cọc đơn hàng", time: "Đã cọc thành công", done: true },
+            { step: "Nhân viên mua hàng", time: "Đang phân công", done: false },
+            { step: "Shop TQ phát hàng", time: "Đang chờ", done: false },
+            { step: "Kho TQ nhận hàng", time: "Đang chờ", done: false },
+            { step: "Kho VN nhận hàng", time: "Đang chờ", done: false },
+            { step: "Giao hàng thành công", time: "Đang chờ", done: false },
+          ]
+        }));
+        setPaySuccess(true);
+        setTimeout(() => setPaySuccess(false), 4000);
+      }
     } finally {
       setPayingWallet(false);
     }

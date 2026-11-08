@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { formatVND, formatCNY } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { orderStore, OrderRecord } from "@/lib/order-store";
+import { OrderStatusBadge } from "@/components/dashboard/OrderStatusBadge";
 
 interface AdminStats {
   total_revenue_vnd: number;
@@ -57,93 +59,44 @@ export default function AdminDashboardPage() {
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
   useEffect(() => {
-    async function loadAdminData() {
-      setLoading(true);
-      try {
-        // Lấy thống kê đơn hàng
-        const { data: allOrders } = await supabase
-          .from("orders")
-          .select("id, order_code, status, total_cny, total_vnd, deposit_amount, created_at, contract_type, customer_id")
-          .order("created_at", { ascending: false });
+    function computeAdminStats(orders: OrderRecord[]) {
+      const toBuy = orders.filter((o) => [1, 2, 3].includes(o.status));
+      const totalRevenue = orders.reduce((s, o) => s + Number(o.total_vnd || 0), 0);
+      const totalWeight = orders.reduce((s, o) => s + Number(o.total_weight_kg || 0), 0);
+      const toBuyValCNY = toBuy.reduce((s, o) => s + Number(o.total_cny || 0), 0);
 
-        if (allOrders && allOrders.length > 0) {
-          const now = new Date();
-          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-          const monthOrders = allOrders.filter((o: any) => o.created_at >= monthStart);
-          const toBuy = allOrders.filter((o: any) => [1, 2, 3].includes(o.status));
+      setStats((prev) => ({
+        ...prev,
+        total_revenue_vnd: totalRevenue,
+        total_weight_kg: Number(totalWeight.toFixed(2)),
+        orders_to_buy_today: toBuy.length,
+        orders_to_buy_value_cny: toBuyValCNY,
+        total_customers: 17314,
+        new_customers_week: 142,
+      }));
 
-          setStats(prev => ({
-            ...prev,
-            total_revenue_vnd: monthOrders.reduce((s: number, o: any) => s + Number(o.total_vnd || 0), 0),
-            orders_to_buy_today: toBuy.length,
-            orders_to_buy_value_cny: toBuy.reduce((s: number, o: any) => s + Number(o.total_cny || 0), 0),
-          }));
-
-          setRecentOrders(allOrders.slice(0, 8));
-        } else {
-          // Demo fallback
-          setStats({
-            total_revenue_vnd: 1425800000,
-            total_weight_kg: 18400,
-            orders_to_buy_today: 24,
-            orders_to_buy_value_cny: 45800,
-            total_customers: 17314,
-            new_customers_week: 142,
-          });
-        }
-
-        // Lấy thống kê khách hàng
-        const { count: customerCount } = await supabase
-          .from("profiles")
-          .select("id", { count: "exact", head: true })
-          .eq("role", "customer");
-
-        if (customerCount !== null) {
-          setStats(prev => ({ ...prev, total_customers: customerCount }));
-        }
-
-        // Lấy danh sách kho
-        const { data: warehouseData } = await supabase
-          .from("warehouses")
-          .select("*")
-          .order("created_at");
-
-        if (warehouseData && warehouseData.length > 0) {
-          // Lấy tổng trọng lượng packages đang ở mỗi kho
-          const warehouseStatuses: WarehouseStatus[] = [];
-          for (const wh of warehouseData) {
-            const { count: readyCount } = await supabase
-              .from("packages")
-              .select("id", { count: "exact", head: true })
-              .eq("current_warehouse_id", wh.id);
-
-            warehouseStatuses.push({
-              id: wh.id,
-              code: wh.code,
-              name: wh.name,
-              location: wh.location || wh.country,
-              weight_kg: 0,
-              ready_orders: readyCount || 0,
-              note: wh.is_active ? "Đang hoạt động" : "Tạm ngưng",
-            });
-          }
-          setWarehouses(warehouseStatuses);
-        } else {
-          setWarehouses([
-            { id: "1", code: "KHO-QUANGCHAU", name: "Kho Quảng Châu (CN)", location: "Trung Quốc", weight_kg: 1420, ready_orders: 8, note: "8 Bao hàng chuẩn bị niêm phong" },
-            { id: "2", code: "KHO-BANGTUONG", name: "Kho Bằng Tường (CN)", location: "Trung Quốc", weight_kg: 3850, ready_orders: 0, note: "Chuyến xe đang làm thủ tục qua cửa khẩu" },
-            { id: "3", code: "KHO-HN", name: "Kho Hà Nội (VN)", location: "Việt Nam", weight_kg: 6240, ready_orders: 142, note: "142 đơn sẵn sàng giao khách" },
-            { id: "4", code: "KHO-HCM", name: "Kho TP. Hồ Chí Minh (VN)", location: "Việt Nam", weight_kg: 4120, ready_orders: 98, note: "98 đơn đang vận chuyển nội thành" },
-          ]);
-        }
-      } catch (err) {
-        console.error("Admin dashboard error:", err);
-      } finally {
-        setLoading(false);
-      }
+      setRecentOrders(orders.slice(0, 8));
     }
 
-    loadAdminData();
+    setLoading(true);
+    const initialOrders = orderStore.getOrders();
+    computeAdminStats(initialOrders);
+
+    setWarehouses([
+      { id: "1", code: "KHO-QUANGCHAU", name: "Kho Quảng Châu (CN)", location: "Trung Quốc", weight_kg: 1420, ready_orders: 8, note: "8 Bao hàng chuẩn bị niêm phong" },
+      { id: "2", code: "KHO-BANGTUONG", name: "Kho Bằng Tường (CN)", location: "Trung Quốc", weight_kg: 3850, ready_orders: 0, note: "Chuyến xe đang làm thủ tục qua cửa khẩu" },
+      { id: "3", code: "KHO-HN", name: "Kho Hà Nội (VN)", location: "Việt Nam", weight_kg: 6240, ready_orders: 142, note: "142 đơn sẵn sàng giao khách" },
+      { id: "4", code: "KHO-HCM", name: "Kho TP. Hồ Chí Minh (VN)", location: "Việt Nam", weight_kg: 4120, ready_orders: 98, note: "98 đơn đang vận chuyển nội thành" },
+    ]);
+    setLoading(false);
+
+    const unsubscribe = orderStore.subscribe((updatedOrders) => {
+      computeAdminStats(updatedOrders);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   return (
@@ -294,12 +247,10 @@ export default function AdminDashboardPage() {
                 {recentOrders.map((o: any) => (
                   <tr key={o.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="py-3.5 px-4 font-mono font-bold text-brand-700">
-                      <Link href={`/orders/${o.id}`} className="hover:underline">{o.order_code}</Link>
+                      <Link href={`/admin/orders/${o.order_code || o.id}`} className="hover:underline text-blue-600 font-black">{o.order_code}</Link>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md text-[11px] font-bold">
-                        {o.status}
-                      </span>
+                      <OrderStatusBadge status={o.status} />
                     </td>
                     <td className="py-3.5 px-4 text-gray-600 font-semibold">{o.contract_type || "-"}</td>
                     <td className="py-3.5 px-4 font-bold text-gray-900">{formatVND(Number(o.total_vnd || 0))}</td>

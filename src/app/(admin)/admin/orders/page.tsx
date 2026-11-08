@@ -28,6 +28,7 @@ import { formatVND, formatCNY, formatDate } from "@/lib/utils";
 import { OrderStatusBadge } from "@/components/dashboard/OrderStatusBadge";
 import { OrderStatus } from "@/types";
 import { createClient } from "@/lib/supabase/client";
+import { orderStore } from "@/lib/order-store";
 
 interface AdminOrderRow {
   id: string;
@@ -75,262 +76,41 @@ export default function AdminOrdersManagementPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadAllOrders() {
+    function loadAllOrders() {
       setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from("orders")
-          .select("*, profiles:customer_id(full_name, user_code), order_items(id), order_tracking_codes(id)")
-          .order("created_at", { ascending: false });
-
-        if (error) {
-          console.warn("Admin orders query error:", error.message);
-        }
-
-        if (data && data.length > 0) {
-          setOrders(data.map((o: any) => {
-            const revenue = Number(o.total_vnd || 0);
-            const cost = Number(o.total_cost_vnd || revenue * 0.88);
-            const profit = Number(o.gross_profit_vnd || (revenue - cost));
-            return {
-              id: o.id,
-              order_code: o.order_code,
-              customer_name: o.profiles?.full_name || "Nguyễn Văn Trung",
-              customer_code: o.profiles?.user_code || "NT2820",
-              status: o.status as OrderStatus,
-              total_cny: Number(o.total_cny || 0),
-              total_vnd: revenue,
-              total_cost_vnd: cost,
-              gross_profit_vnd: profit,
-              deposit_amount: Number(o.deposit_amount || 0),
-              min_deposit_amount: Number(o.min_deposit_amount || 0),
-              contract_type: o.contract_type || "Chính ngạch Ủy Thác",
-              purchaser_name: o.purchaser_name || "Lê Hoàng Thu",
-              hashtags: o.hashtags && o.hashtags.length > 0 ? o.hashtags : ["#HangDeVo"],
-              tracking_count: o.order_tracking_codes?.length || 2,
-              created_at: o.created_at,
-              item_count: o.order_items?.length || 2,
-            };
-          }));
-        } else {
-          // Dữ liệu trích xuất từ 10 đơn hàng thực tế trong Auto_Gemini
-          setOrders([
-            {
-              id: "MD2596",
-              order_code: "MD2596",
-              customer_name: "Nguyễn Văn Trung",
-              customer_code: "NT2820",
-              status: 0,
-              total_cny: 9520,
-              total_vnd: 42520111,
-              total_cost_vnd: 36069900,
-              gross_profit_vnd: 6450211,
-              deposit_amount: 0,
-              min_deposit_amount: 33098741,
-              contract_type: "Chính ngạch Ủy Thác",
-              purchaser_name: "Lê Hoàng Thu",
-              hashtags: ["#HangDeVo", "#ChotTTLan2", "#GiaTriCao"],
-              tracking_count: 2,
-              created_at: "2026-10-21T04:42:40.000Z",
-              item_count: 2,
-            },
-            {
-              id: "MD2591",
-              order_code: "MD2591",
-              customer_name: "Nguyễn Văn Trung",
-              customer_code: "NT2820",
-              status: 1,
-              total_cny: 4850,
-              total_vnd: 21950000,
-              total_cost_vnd: 19100000,
-              gross_profit_vnd: 2850000,
-              deposit_amount: 15365000,
-              min_deposit_amount: 15365000,
-              contract_type: "Chính ngạch Đích Danh",
-              purchaser_name: "Nguyễn Văn Hùng",
-              hashtags: ["#HoaToc", "#CanDongGo"],
-              tracking_count: 1,
-              created_at: "2026-10-20T08:15:00.000Z",
-              item_count: 4,
-            },
-            {
-              id: "MD2585",
-              order_code: "MD2585",
-              customer_name: "Phạm Hồng Quân",
-              customer_code: "NT1920",
-              status: 3,
-              total_cny: 6300,
-              total_vnd: 28450000,
-              total_cost_vnd: 24700000,
-              gross_profit_vnd: 3750000,
-              deposit_amount: 28450000,
-              min_deposit_amount: 19915000,
-              contract_type: "Chính ngạch Ủy Thác",
-              purchaser_name: "Lê Hoàng Thu",
-              hashtags: ["#HangGiaTriCao"],
-              tracking_count: 3,
-              created_at: "2026-10-18T14:30:00.000Z",
-              item_count: 3,
-            },
-            {
-              id: "MD2584",
-              order_code: "MD2584",
-              customer_name: "Trần Mai Anh",
-              customer_code: "NT3005",
-              status: 6,
-              total_cny: 12400,
-              total_vnd: 54800000,
-              total_cost_vnd: 48100000,
-              gross_profit_vnd: 6700000,
-              deposit_amount: 38360000,
-              min_deposit_amount: 38360000,
-              contract_type: "Tiểu ngạch",
-              purchaser_name: "Trần Quốc Đạt",
-              hashtags: ["#ChotTTLan2"],
-              tracking_count: 2,
-              created_at: "2026-10-17T09:20:00.000Z",
-              item_count: 6,
-            },
-            {
-              id: "MD2581",
-              order_code: "MD2581",
-              customer_name: "Thu Nguyễn",
-              customer_code: "NT1102",
-              status: 10,
-              total_cny: 6960,
-              total_vnd: 27955642,
-              total_cost_vnd: 24200000,
-              gross_profit_vnd: 3755642,
-              deposit_amount: 22147382,
-              min_deposit_amount: 19568949,
-              contract_type: "Chính ngạch",
-              purchaser_name: "Lê Hoàng Thu",
-              hashtags: ["#HangPin", "#ChotTTLan2"],
-              tracking_count: 2,
-              created_at: "2026-10-16T11:45:00.000Z",
-              item_count: 5,
-            },
-            {
-              id: "MD2529",
-              order_code: "MD2529",
-              customer_name: "Đỗ Gia Huy",
-              customer_code: "NT2219",
-              status: 11,
-              total_cny: 18200,
-              total_vnd: 78500000,
-              total_cost_vnd: 69200000,
-              gross_profit_vnd: 9300000,
-              deposit_amount: 54950000,
-              min_deposit_amount: 54950000,
-              contract_type: "Chính ngạch Ủy Thác",
-              purchaser_name: "Nguyễn Văn Hùng",
-              hashtags: ["#CanKiemDem"],
-              tracking_count: 4,
-              created_at: "2026-10-10T16:00:00.000Z",
-              item_count: 8,
-            },
-            {
-              id: "MD2403",
-              order_code: "MD2403",
-              customer_name: "Đinh Công Kha",
-              customer_code: "NT0842",
-              status: 16,
-              total_cny: 1540,
-              total_vnd: 6254700,
-              total_cost_vnd: 5450000,
-              gross_profit_vnd: 804700,
-              deposit_amount: 0,
-              min_deposit_amount: 4378290,
-              contract_type: "Tiểu ngạch",
-              purchaser_name: "Trần Quốc Đạt",
-              hashtags: ["#DaHuy"],
-              tracking_count: 1,
-              created_at: "2026-09-28T09:10:00.000Z",
-              item_count: 1,
-            },
-            {
-              id: "MD2398",
-              order_code: "MD2398",
-              customer_name: "Lê Minh Tuấn",
-              customer_code: "NT1408",
-              status: 14,
-              total_cny: 31200,
-              total_vnd: 132400000,
-              total_cost_vnd: 116500000,
-              gross_profit_vnd: 15900000,
-              deposit_amount: 132400000,
-              min_deposit_amount: 92680000,
-              contract_type: "Chính ngạch Ủy Thác",
-              purchaser_name: "Lê Hoàng Thu",
-              hashtags: ["#HoanThanh", "#GiaTriCao"],
-              tracking_count: 5,
-              created_at: "2026-09-25T13:40:00.000Z",
-              item_count: 12,
-            },
-            {
-              id: "MD2308",
-              order_code: "MD2308",
-              customer_name: "Hoàng Đức Duy",
-              customer_code: "NT1888",
-              status: 14,
-              total_cny: 24500,
-              total_vnd: 104200000,
-              total_cost_vnd: 91700000,
-              gross_profit_vnd: 12500000,
-              deposit_amount: 104200000,
-              min_deposit_amount: 72940000,
-              contract_type: "Chính ngạch",
-              purchaser_name: "Nguyễn Văn Hùng",
-              hashtags: ["#HoanThanh"],
-              tracking_count: 3,
-              created_at: "2026-09-12T10:20:00.000Z",
-              item_count: 7,
-            },
-            {
-              id: "MD1986",
-              order_code: "MD1986",
-              customer_name: "Tinox Logistics",
-              customer_code: "NT0401",
-              status: 14,
-              total_cny: 42000,
-              total_vnd: 178500000,
-              total_cost_vnd: 157200000,
-              gross_profit_vnd: 21300000,
-              deposit_amount: 178500000,
-              min_deposit_amount: 124950000,
-              contract_type: "Chính ngạch Ủy Thác",
-              purchaser_name: "Lê Hoàng Thu",
-              hashtags: ["#HoanThanh", "#ChotTTLan2"],
-              tracking_count: 6,
-              created_at: "2026-08-05T08:30:00.000Z",
-              item_count: 15,
-            }
-          ]);
-        }
-      } catch (err) {
-        console.error("Load admin orders error:", err);
-      } finally {
-        setLoading(false);
-      }
+      const stored = orderStore.getOrders();
+      setOrders(stored.map((o) => ({
+        id: o.id,
+        order_code: o.order_code,
+        customer_name: o.customer_name,
+        customer_code: o.customer_code,
+        status: o.status as OrderStatus,
+        total_cny: Number(o.total_cny || 0),
+        total_vnd: Number(o.total_vnd || 0),
+        total_cost_vnd: Number(o.total_cost_vnd || 0),
+        gross_profit_vnd: Number(o.gross_profit_vnd || 0),
+        deposit_amount: Number(o.deposit_amount || 0),
+        min_deposit_amount: Number(o.min_deposit_amount || 0),
+        contract_type: o.contract_type || "Chính ngạch",
+        purchaser_name: o.purchaser_name || "Lê Hoàng Thu",
+        hashtags: o.hashtags || [],
+        tracking_count: o.tracking_codes?.length || 0,
+        created_at: o.created_at,
+        item_count: o.items?.length || 0,
+      })));
+      setLoading(false);
     }
 
     loadAllOrders();
-  }, [supabase]);
 
-  const handleChangeOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
+    window.addEventListener("NTG_ORDERS_UPDATED", loadAllOrders);
+    return () => window.removeEventListener("NTG_ORDERS_UPDATED", loadAllOrders);
+  }, []);
+
+  const handleChangeOrderStatus = (orderId: string, newStatus: OrderStatus) => {
     setUpdatingId(orderId);
-    try {
-      await supabase
-        .from("orders")
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq("id", orderId);
-
-      setOrders(orders.map((o) => o.id === orderId ? { ...o, status: newStatus } : o));
-    } catch (err) {
-      console.error("Update status error:", err);
-    } finally {
-      setUpdatingId(null);
-    }
+    orderStore.updateOrderStatus(orderId, newStatus);
+    setUpdatingId(null);
   };
 
   const filteredOrders = orders.filter((o) => {

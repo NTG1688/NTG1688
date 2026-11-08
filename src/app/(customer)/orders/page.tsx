@@ -8,6 +8,7 @@ import { Search, Filter, ShoppingBag, ArrowRight, Clock, Plus, Loader2, PackageX
 import { OrderStatus } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { orderStore } from "@/lib/order-store";
 
 interface OrderItem {
   id: string;
@@ -51,99 +52,35 @@ export default function CustomerOrdersPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    async function loadOrders() {
+    function loadOrders() {
       setLoading(true);
-      try {
-        let query = supabase
-          .from("orders")
-          .select("*, order_items(*)")
-          .order("created_at", { ascending: false });
-
-        if (user) {
-          query = query.eq("user_id", user.id);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-          console.warn("Could not query orders:", error.message);
-        }
-
-        if (data && data.length > 0) {
-          const mapped: OrderItem[] = data.map((o: any) => {
-            const firstItem = o.order_items?.[0];
-            return {
-              id: o.id,
-              order_code: o.order_code,
-              status: o.status as OrderStatus,
-              total_cny: Number(o.total_cny || 0),
-              total_vnd: Number(o.total_vnd || 0),
-              deposit_amount: Number(o.deposit_amount || 0),
-              min_deposit_amount: Number(o.deposit_amount ? 0 : (o.total_vnd || 0) * 0.7),
-              created_at: o.created_at,
-              shop_name: firstItem?.shop_name || "Nhà cung cấp 1688 / Taobao",
-              item_title: firstItem?.title || "Sản phẩm nhập khẩu chính ngạch",
-              image: firstItem?.image_url || "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=150&q=80",
-              contract_type: o.contract_type === "chinh_ngach" ? "Chính ngạch Ủy Thác" : "Tiểu ngạch",
-            };
-          });
-          setOrders(mapped);
-        } else {
-          // Dữ liệu mẫu ban đầu để khách hàng và admin luôn có trải nghiệm xem trực quan
-          setOrders([
-            {
-              id: "2596",
-              order_code: "MD2596",
-              status: 0,
-              total_cny: 9520,
-              total_vnd: 42520111,
-              deposit_amount: 0,
-              min_deposit_amount: 33098741,
-              created_at: "2026-10-21T04:42:40.000Z",
-              shop_name: "TNHH Cơ Khí Quảng Châu",
-              item_title: "Lô hàng linh kiện & thiết bị cơ khí nhập khẩu chính ngạch (Tờ khai NKCN)",
-              image: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=150&q=80",
-              contract_type: "Chính ngạch Ủy Thác",
-            },
-            {
-              id: "2588",
-              order_code: "MD2588",
-              status: 10,
-              total_cny: 2840,
-              total_vnd: 12450000,
-              deposit_amount: 10000000,
-              min_deposit_amount: 8715000,
-              created_at: "2026-10-18T09:15:20.000Z",
-              shop_name: "Taobao Flagship Store",
-              item_title: "Quần áo thời trang thu đông mẫu mới nhất 2026",
-              image: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=150&q=80",
-              contract_type: "Tiểu ngạch",
-            },
-            {
-              id: "2572",
-              order_code: "MD2572",
-              status: 11,
-              total_cny: 5400,
-              total_vnd: 23800000,
-              deposit_amount: 20000000,
-              min_deposit_amount: 16660000,
-              created_at: "2026-10-15T14:30:00.000Z",
-              shop_name: "1688 OEM Factory",
-              item_title: "Đồ gia dụng thông minh cao cấp xuất khẩu",
-              image: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=150&q=80",
-              contract_type: "Tiểu ngạch",
-            },
-          ]);
-        }
-      } catch (err) {
-        console.error("Load orders error:", err);
-      } finally {
-        setLoading(false);
-      }
+      const stored = orderStore.getOrders();
+      const mapped: OrderItem[] = stored.map((o) => {
+        const firstItem = o.items?.[0];
+        return {
+          id: o.id,
+          order_code: o.order_code,
+          status: o.status,
+          total_cny: o.total_cny,
+          total_vnd: o.total_vnd,
+          deposit_amount: o.deposit_amount,
+          min_deposit_amount: o.min_deposit_amount,
+          created_at: o.created_at,
+          shop_name: o.shop_name || "Nhà cung cấp 1688 / Taobao",
+          item_title: firstItem?.title || "Sản phẩm nhập khẩu chính ngạch",
+          image: firstItem?.image_url || "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=150&q=80",
+          contract_type: o.contract_type || "Chính ngạch Ủy Thác",
+        };
+      });
+      setOrders(mapped);
+      setLoading(false);
     }
 
     loadOrders();
-  }, [user]);
+
+    window.addEventListener("NTG_ORDERS_UPDATED", loadOrders);
+    return () => window.removeEventListener("NTG_ORDERS_UPDATED", loadOrders);
+  }, []);
 
   const filteredOrders = orders.filter((order) => {
     if (selectedStatus !== "all" && order.status !== selectedStatus) return false;
@@ -302,12 +239,15 @@ export default function CustomerOrdersPage() {
 
                   <div className="flex items-center gap-2">
                     {order.status === 0 && (
-                      <button className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer">
+                      <Link 
+                        href={`/orders/${order.order_code || order.id}`}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer inline-block"
+                      >
                         Đặt Cọc Ngay
-                      </button>
+                      </Link>
                     )}
                     <Link
-                      href={`/orders/${order.id}`}
+                      href={`/orders/${order.order_code || order.id}`}
                       className="p-2 hover:bg-gray-100 rounded-xl text-gray-500 hover:text-brand-600 transition-colors"
                     >
                       <ArrowRight className="w-5 h-5" />

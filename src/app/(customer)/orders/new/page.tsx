@@ -7,6 +7,7 @@ import { formatVND, formatCNY } from "@/lib/utils";
 import { ImageUploader } from "@/components/ui/ImageUploader";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { orderStore } from "@/lib/order-store";
 import { 
   ArrowLeft, 
   Plus, 
@@ -122,57 +123,111 @@ export default function NewOrderPage() {
 
     try {
       setIsSubmitting(true);
-      const orderCode = `NTG-ORD-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const randomNum = Math.floor(2600 + Math.random() * 100);
+      const orderCode = `MD${randomNum}`;
 
-      if (!user) {
-        alert("Vui lòng đăng nhập trước khi tạo đơn hàng.");
-        router.push("/login");
-        return;
-      }
+      // Tạo các item chuẩn cho Order Store
+      const formattedItems = items.map((it, idx) => ({
+        id: `it_${Date.now()}_${idx}`,
+        order_id: orderCode,
+        title: it.title,
+        link: it.link,
+        shop_name: "1688 / Taobao Factory",
+        shop_id: "shop_oem",
+        image_url: it.imageUrl || "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=150&q=80",
+        properties: it.property || "Mặc định",
+        quantity: Number(it.quantity) || 1,
+        quantity_received: 0,
+        price_cny: Number(it.priceCny) || 0,
+        price_real_cny: Number(it.priceCny) || 0,
+        discount_cny: 0,
+        total_cny: (Number(it.priceCny) || 0) * (Number(it.quantity) || 1),
+        total_cost_cny: (Number(it.priceCny) || 0) * (Number(it.quantity) || 1),
+        weight_kg: 0,
+        customer_note: it.note || "",
+        internal_note: "",
+        status: 0,
+      }));
 
-      // Lưu đơn vào Supabase
-      const { data: order, error: orderErr } = await supabase.from("orders").insert({
+      // Lưu trực tiếp vào ERP Order Store
+      orderStore.createOrder({
+        id: orderCode,
         order_code: orderCode,
-        customer_id: user.id,
+        customer_id: user?.id || "cust-01",
+        customer_name: user?.email ? user.email.split("@")[0] : "Khách Hàng NTG",
+        customer_code: "NT2820",
+        customer_phone: "0988776655",
         status: 0, // Chờ cọc
         order_type: orderType,
+        contract_type: orderType === "chinh_ngach" ? contractType : "Tiểu ngạch",
         exchange_rate: exchangeRate,
+        real_exchange_rate: exchangeRate - 35,
         total_cny: totalCny,
+        total_cost_cny: totalCny,
+        bargain_discount_cny: 0,
         total_vnd: totalOrderVnd,
         deposit_amount: 0,
         min_deposit_amount: minDepositVnd,
         remaining_amount: totalOrderVnd,
         fee_buy: feeBuy,
         fee_check: feeCheck,
+        fee_wood: 0,
         fee_insurance: feeInsurance,
         fee_utnk: feeUtnk,
-        tax_vat_rate: taxVatRate,
         tax_vat_amount: taxVatAmount,
-        tax_nk_rate: taxNkRate,
         tax_nk_amount: taxNkAmount,
-        contract_type: orderType === "chinh_ngach" ? contractType : "Tiểu ngạch",
         customer_note: customerNote,
-        receive_warehouse_id: warehouseId,
-      }).select().single();
+        items: formattedItems,
+        tracking_codes: [],
+      });
 
-      if (orderErr) {
-        console.warn("Notice saving to DB:", orderErr.message);
-      } else if (order?.id) {
-        const orderItemsToInsert = items.map((it) => ({
-          order_id: order.id,
-          title: it.title,
-          source_url: it.link,
-          property_desc: it.property,
-          price_cny: it.priceCny,
-          quantity: it.quantity,
-          image_url: it.imageUrl,
-          customer_note: it.note,
-        }));
-        await supabase.from("order_items").insert(orderItemsToInsert);
+      // Background đồng bộ Supabase nếu kết nối sẵn
+      try {
+        if (user) {
+          const { data: order } = await supabase.from("orders").insert({
+            order_code: orderCode,
+            customer_id: user.id,
+            status: 0,
+            order_type: orderType,
+            exchange_rate: exchangeRate,
+            total_cny: totalCny,
+            total_vnd: totalOrderVnd,
+            deposit_amount: 0,
+            min_deposit_amount: minDepositVnd,
+            remaining_amount: totalOrderVnd,
+            fee_buy: feeBuy,
+            fee_check: feeCheck,
+            fee_insurance: feeInsurance,
+            fee_utnk: feeUtnk,
+            tax_vat_rate: taxVatRate,
+            tax_vat_amount: taxVatAmount,
+            tax_nk_rate: taxNkRate,
+            tax_nk_amount: taxNkAmount,
+            contract_type: orderType === "chinh_ngach" ? contractType : "Tiểu ngạch",
+            customer_note: customerNote,
+            receive_warehouse_id: warehouseId,
+          }).select().single();
+
+          if (order?.id) {
+            const orderItemsToInsert = items.map((it) => ({
+              order_id: order.id,
+              title: it.title,
+              source_url: it.link,
+              property_desc: it.property,
+              price_cny: it.priceCny,
+              quantity: it.quantity,
+              image_url: it.imageUrl,
+              customer_note: it.note,
+            }));
+            await supabase.from("order_items").insert(orderItemsToInsert);
+          }
+        }
+      } catch (dbErr) {
+        console.warn("Supabase background sync:", dbErr);
       }
 
-      alert(`Tạo đơn hàng ${orderCode} thành công! Hệ thống chuyển bạn về danh sách đơn.`);
-      router.push("/orders");
+      alert(`Tạo đơn hàng ${orderCode} thành công! Hệ thống chuyển bạn tới trang chi tiết đơn.`);
+      router.push(`/orders/${orderCode}`);
     } catch (err: any) {
       alert("Lỗi tạo đơn: " + err.message);
     } finally {

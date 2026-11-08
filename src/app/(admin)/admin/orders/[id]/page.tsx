@@ -36,6 +36,7 @@ import { formatVND, formatCNY, formatDate } from "@/lib/utils";
 import { OrderStatusBadge } from "@/components/dashboard/OrderStatusBadge";
 import { Order, OrderItem, OrderTrackingCode, OrderStatus } from "@/types";
 import { createClient } from "@/lib/supabase/client";
+import { orderStore, StoredOrder } from "@/lib/order-store";
 
 // Danh sách trạng thái chuẩn hệ thống
 const ORDER_STATUS_LIST: { value: OrderStatus; label: string }[] = [
@@ -254,79 +255,35 @@ export default function AdminOrderDetailPage() {
   });
   const [showAddTrackingModal, setShowAddTrackingModal] = useState(false);
 
-  // Fetch dữ liệu từ Supabase hoặc fallback
-  useEffect(() => {
-    async function loadOrderData() {
-      if (!orderId) return;
-      try {
-        const { data: dbOrder } = await supabase
-          .from("orders")
-          .select("*, order_items(*), order_tracking_codes(*), declarations(*)")
-          .or(`id.eq.${orderId},order_code.eq.${orderId}`)
-          .maybeSingle();
+  // State form thêm sản phẩm mới
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [newItemInput, setNewItemInput] = useState({
+    title: "",
+    product_link: "https://detail.1688.com/offer/712398403.html",
+    properties: "Mặc định",
+    quantity: 10,
+    price_cny: 50,
+    price_real_cny: 48,
+    weight_kg: 5
+  });
 
-        if (dbOrder) {
-          setOrder((prev: any) => ({
-            ...prev,
-            id: dbOrder.id,
-            order_code: dbOrder.order_code,
-            status: dbOrder.status,
-            exchange_rate: Number(dbOrder.exchange_rate || 4015),
-            real_exchange_rate: Number(dbOrder.real_exchange_rate || 3955),
-            total_cny: Number(dbOrder.total_cny || prev.total_cny),
-            total_cost_cny: Number(dbOrder.total_cost_cny || prev.total_cost_cny),
-            bargain_discount_cny: Number(dbOrder.bargain_discount_cny || prev.bargain_discount_cny),
-            fee_buy: Number(dbOrder.fee_buy || prev.fee_buy),
-            fee_ship_cn_cny: Number(dbOrder.fee_ship_cn_cny || prev.fee_ship_cn_cny),
-            fee_ship_cn_vnd: Number(dbOrder.fee_ship_cn_vnd || prev.fee_ship_cn_vnd),
-            real_ship_cn_cny: Number(dbOrder.real_ship_cn_cny || prev.real_ship_cn_cny),
-            fee_weight: Number(dbOrder.fee_weight || prev.fee_weight),
-            real_weight_fee_vnd: Number(dbOrder.real_weight_fee_vnd || prev.real_weight_fee_vnd),
-            fee_check: Number(dbOrder.fee_check || prev.fee_check),
-            fee_wood: Number(dbOrder.fee_wood || prev.fee_wood),
-            fee_insurance: Number(dbOrder.fee_insurance || prev.fee_insurance),
-            fee_utnk: Number(dbOrder.fee_utnk || prev.fee_utnk),
-            tax_vat_amount: Number(dbOrder.tax_vat_amount || prev.tax_vat_amount),
-            tax_nk_amount: Number(dbOrder.tax_nk_amount || prev.tax_nk_amount),
-            tax_hdtq_amount: Number(dbOrder.tax_hdtq_amount || prev.tax_hdtq_amount),
-            total_weight_kg: Number(dbOrder.total_weight_kg || prev.total_weight_kg),
-            chargeable_weight_kg: Number(dbOrder.chargeable_weight_kg || prev.chargeable_weight_kg),
-            hashtags: dbOrder.hashtags && dbOrder.hashtags.length > 0 ? dbOrder.hashtags : prev.hashtags,
-            china_order_id: dbOrder.china_order_id || prev.china_order_id,
-            alipay_transaction_id: dbOrder.alipay_transaction_id || prev.alipay_transaction_id,
-            deposit_amount: Number(dbOrder.deposit_amount || prev.deposit_amount),
-            paid_amount_vnd: Number(dbOrder.paid_amount_vnd || prev.paid_amount_vnd),
-            is_second_payment_confirmed: !!dbOrder.is_second_payment_confirmed,
-            customer_note: dbOrder.customer_note || prev.customer_note,
-            internal_note: dbOrder.internal_note || prev.internal_note,
-            items: dbOrder.order_items?.length > 0 ? dbOrder.order_items.map((it: any) => ({
-              id: it.id,
-              title: it.title,
-              image_url: it.image_url || prev.items[0]?.image_url,
-              product_link: it.product_link,
-              properties: it.properties || "Mặc định",
-              quantity: it.quantity,
-              quantity_received: it.quantity,
-              price_cny: Number(it.price_cny),
-              price_real_cny: Number(it.price_cny) * 0.95,
-              total_cny: Number(it.price_cny) * it.quantity,
-              total_cost_cny: Number(it.price_cny) * it.quantity * 0.95,
-              weight_kg: Number(it.weight_kg || 1),
-              customer_note: it.customer_note || "",
-              status: it.status || 1
-            })) : prev.items,
-            tracking_codes: dbOrder.order_tracking_codes?.length > 0 ? dbOrder.order_tracking_codes : prev.tracking_codes
-          }));
-        }
-      } catch (err) {
-        console.warn("Could not fetch order from DB, using rich reference dataset:", err);
-      } finally {
+  // Fetch dữ liệu từ Order Store và Supabase
+  useEffect(() => {
+    function loadOrderData() {
+      if (!orderId) return;
+      const found = orderStore.getOrderById(orderId);
+      if (found) {
+        setOrder(found);
         setLoading(false);
       }
     }
 
     loadOrderData();
-  }, [orderId, supabase]);
+
+    // Lắng nghe sự kiện cập nhật đơn hàng trên toàn hệ thống
+    window.addEventListener("NTG_ORDERS_UPDATED", loadOrderData);
+    return () => window.removeEventListener("NTG_ORDERS_UPDATED", loadOrderData);
+  }, [orderId]);
 
   // TÍNH TOÁN TOÀN BỘ TÀI CHÍNH THỰC TẾ (REAL-TIME COMPUTED FINANCIALS)
   const financialMetrics = useMemo(() => {
@@ -428,24 +385,25 @@ export default function AdminOrderDetailPage() {
   // Thao tác thêm mã vận đơn con mới
   const handleAddTrackingCode = () => {
     if (!newTrackingInput.tracking_code.trim()) return;
-    const newCode: OrderTrackingCode = {
-      id: `tr_${Date.now()}`,
-      order_id: order.id,
+    const updated = orderStore.addTrackingCode(order.id, {
       tracking_code: newTrackingInput.tracking_code.trim(),
       carrier_name: newTrackingInput.carrier_name,
       weight_kg: Number(newTrackingInput.weight_kg || 0),
       cbm: 0.05,
       dimensions: newTrackingInput.dimensions || "40x30x20",
       status: "shop_dispatched",
-      note: newTrackingInput.note,
-      created_at: new Date().toISOString()
-    };
-    setOrder({
-      ...order,
-      tracking_codes: [...(order.tracking_codes || []), newCode],
-      total_weight_kg: (order.total_weight_kg || 0) + newCode.weight_kg,
-      chargeable_weight_kg: (order.chargeable_weight_kg || 0) + newCode.weight_kg
+      package_code: "xachtay1708",
+      vehicle_code: "XE-TRUCK-88C-19284",
+      china_received_at: null,
+      china_exported_at: null,
+      vn_received_at: null,
+      vn_exported_at: null,
+      note: newTrackingInput.note
     });
+
+    if (updated) {
+      setOrder(updated);
+    }
     setNewTrackingInput({
       tracking_code: "",
       carrier_name: "Yuantong Express (Viên Thông)",
@@ -457,64 +415,69 @@ export default function AdminOrderDetailPage() {
   };
 
   const handleRemoveTrackingCode = (trId: string) => {
-    setOrder({
-      ...order,
-      tracking_codes: (order.tracking_codes || []).filter((t: any) => t.id !== trId)
+    const updated = orderStore.deleteTrackingCode(order.id, trId);
+    if (updated) {
+      setOrder(updated);
+    }
+  };
+
+  // Thao tác thêm sản phẩm mới vào đơn hàng
+  const handleAddProductItem = () => {
+    if (!newItemInput.title.trim()) return;
+    const updated = orderStore.addOrderItem(order.id, {
+      title: newItemInput.title,
+      image_url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=150&q=80",
+      product_link: newItemInput.product_link,
+      properties: newItemInput.properties,
+      quantity: Number(newItemInput.quantity) || 1,
+      quantity_received: Number(newItemInput.quantity) || 1,
+      price_cny: Number(newItemInput.price_cny) || 0,
+      price_real_cny: Number(newItemInput.price_real_cny) || Number(newItemInput.price_cny),
+      discount_cny: Math.max(0, (Number(newItemInput.price_cny) || 0) - (Number(newItemInput.price_real_cny) || 0)),
+      weight_kg: Number(newItemInput.weight_kg) || 1,
+      customer_note: "",
+      internal_note: "",
+      status: 1
+    });
+
+    if (updated) {
+      setOrder(updated);
+    }
+    setShowAddItemModal(false);
+    setNewItemInput({
+      title: "",
+      product_link: "https://detail.1688.com/offer/712398403.html",
+      properties: "Mặc định",
+      quantity: 10,
+      price_cny: 50,
+      price_real_cny: 48,
+      weight_kg: 5
     });
   };
 
-  // Lưu toàn bộ thay đổi lên Supabase
+  // Thao tác xóa sản phẩm khỏi đơn hàng
+  const handleDeleteProductItem = (itemId: string) => {
+    const updated = orderStore.deleteOrderItem(order.id, itemId);
+    if (updated) {
+      setOrder(updated);
+    }
+  };
+
+  // Lưu toàn bộ thay đổi vào Order Store & Supabase
   const handleSaveAll = async () => {
     setSaving(true);
     setSaveSuccess(false);
     try {
-      // Update bảng orders
-      await supabase
-        .from("orders")
-        .update({
-          status: order.status,
-          contract_type: order.contract_type,
-          exchange_rate: order.exchange_rate,
-          real_exchange_rate: order.real_exchange_rate,
-          total_cny: order.total_cny,
-          total_cost_cny: order.total_cost_cny,
-          bargain_discount_cny: order.bargain_discount_cny,
-          fee_buy: order.fee_buy,
-          fee_ship_cn_cny: order.fee_ship_cn_cny,
-          fee_ship_cn_vnd: order.fee_ship_cn_vnd,
-          real_ship_cn_cny: order.real_ship_cn_cny,
-          fee_weight: order.fee_weight,
-          real_weight_fee_vnd: order.real_weight_fee_vnd,
-          fee_check: order.fee_check,
-          fee_wood: order.fee_wood,
-          fee_insurance: order.fee_insurance,
-          fee_utnk: order.fee_utnk,
-          tax_vat_amount: order.tax_vat_amount,
-          tax_nk_amount: order.tax_nk_amount,
-          tax_hdtq_amount: order.tax_hdtq_amount,
-          total_weight_kg: order.total_weight_kg,
-          chargeable_weight_kg: order.chargeable_weight_kg,
-          hashtags: order.hashtags,
-          china_order_id: order.china_order_id,
-          alipay_transaction_id: order.alipay_transaction_id,
-          customer_note: order.customer_note,
-          internal_note: order.internal_note,
-          gross_profit_vnd: financialMetrics.grossProfitVND,
-          total_cost_vnd: financialMetrics.totalCostVND,
-          total_vnd: financialMetrics.totalRevenueVND,
-          profit_rate_percent: financialMetrics.profitRatePercent,
-          paid_amount_vnd: order.paid_amount_vnd,
-          is_second_payment_confirmed: order.is_second_payment_confirmed
-        })
-        .eq("id", order.id);
-
+      const updated = orderStore.updateOrder(order.id, order);
+      if (updated) {
+        setOrder(updated);
+      }
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 4000);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error("Save error:", err);
-      // Vẫn thông báo thành công cho UI local
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 4000);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } finally {
       setSaving(false);
     }
@@ -522,13 +485,12 @@ export default function AdminOrderDetailPage() {
 
   // Xác nhận chốt thanh toán lần 2
   const handleConfirmSecondPayment = () => {
-    const secondPayAmount = financialMetrics.debtAmount;
-    setOrder({
-      ...order,
-      is_second_payment_confirmed: true,
-      paid_amount_vnd: (order.paid_amount_vnd || 0) + secondPayAmount,
-      hashtags: [...new Set([...order.hashtags, "#ChotTTLan2"])]
-    });
+    const res = orderStore.confirmSecondPayment(order.id);
+    if (res.success && res.order) {
+      setOrder(res.order);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    }
   };
 
   return (
@@ -1308,14 +1270,22 @@ export default function AdminOrderDetailPage() {
       {/* TAB 3: DANH SÁCH SẢN PHẨM & CHI TIẾT MUA HÀNG */}
       {activeTab === "items" && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-              <Package className="w-4 h-4 text-blue-600" />
-              DANH SÁCH SẢN PHẨM TRONG ĐƠN ({order.items?.length || 0})
-            </h3>
-            <span className="text-xs text-gray-500">
-              Tổng số lượng: <strong className="text-gray-900">{order.items?.reduce((acc: number, it: any) => acc + it.quantity, 0)}</strong> sản phẩm
-            </span>
+          <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                <Package className="w-4 h-4 text-blue-600" />
+                DANH SÁCH SẢN PHẨM TRONG ĐƠN ({order.items?.length || 0})
+              </h3>
+              <span className="text-xs text-gray-500">
+                Tổng số lượng: <strong className="text-gray-900">{order.items?.reduce((acc: number, it: any) => acc + it.quantity, 0)}</strong> sản phẩm
+              </span>
+            </div>
+            <button
+              onClick={() => setShowAddItemModal(true)}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
+            >
+              <Plus className="w-3.5 h-3.5" /> Thêm sản phẩm vào đơn
+            </button>
           </div>
 
           <div className="overflow-x-auto">
@@ -1331,6 +1301,7 @@ export default function AdminOrderDetailPage() {
                   <th className="p-3 text-right">Chiết Khấu (¥)</th>
                   <th className="p-3 text-right">Thành Tiền Web (VND)</th>
                   <th className="p-3 text-right text-emerald-700">Lãi Đàm Phán (VND)</th>
+                  <th className="p-3 text-center w-12">Xóa</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -1400,12 +1371,95 @@ export default function AdminOrderDetailPage() {
                       <td className="p-3 text-right font-bold text-emerald-600">
                         +{formatVND(bargainProfitVND)}
                       </td>
+                      <td className="p-3 text-center">
+                        <button
+                          onClick={() => handleDeleteProductItem(item.id)}
+                          className="p-1 hover:bg-rose-50 text-rose-600 rounded transition"
+                          title="Xóa sản phẩm này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+
+          {/* Modal Thêm sản phẩm mới */}
+          {showAddItemModal && (
+            <div className="p-5 bg-blue-50/70 border-t border-blue-200 space-y-4">
+              <h4 className="font-bold text-gray-900 text-xs uppercase tracking-wider flex items-center gap-2">
+                <Plus className="w-4 h-4 text-blue-600" /> Thêm Sản Phẩm Mới Vào Đơn Hàng
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2">
+                  <label className="text-[11px] font-semibold text-gray-700 block mb-1">Tên sản phẩm:</label>
+                  <input
+                    type="text"
+                    placeholder="VD: Cáp chuyển đổi tín hiệu công nghiệp..."
+                    value={newItemInput.title}
+                    onChange={(e) => setNewItemInput({ ...newItemInput, title: e.target.value })}
+                    className="w-full text-xs p-2 bg-white border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-700 block mb-1">Phân loại (Màu/Size):</label>
+                  <input
+                    type="text"
+                    placeholder="VD: Đen - Dài 2m"
+                    value={newItemInput.properties}
+                    onChange={(e) => setNewItemInput({ ...newItemInput, properties: e.target.value })}
+                    className="w-full text-xs p-2 bg-white border border-gray-300 rounded"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-700 block mb-1">Số lượng đặt:</label>
+                  <input
+                    type="number"
+                    value={newItemInput.quantity}
+                    onChange={(e) => setNewItemInput({ ...newItemInput, quantity: Number(e.target.value) })}
+                    className="w-full text-xs p-2 bg-white border border-gray-300 rounded font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-700 block mb-1">Giá web thu khách (¥):</label>
+                  <input
+                    type="number"
+                    value={newItemInput.price_cny}
+                    onChange={(e) => setNewItemInput({ ...newItemInput, price_cny: Number(e.target.value) })}
+                    className="w-full text-xs p-2 bg-white border border-gray-300 rounded font-bold text-gray-900"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-700 block mb-1">Giá mua thật đàm phán (¥):</label>
+                  <input
+                    type="number"
+                    value={newItemInput.price_real_cny}
+                    onChange={(e) => setNewItemInput({ ...newItemInput, price_real_cny: Number(e.target.value) })}
+                    className="w-full text-xs p-2 bg-white border border-gray-300 rounded font-bold text-blue-700"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddItemModal(false)}
+                  className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-200 rounded"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddProductItem}
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold"
+                >
+                  Xác nhận thêm sản phẩm
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

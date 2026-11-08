@@ -24,6 +24,7 @@ import { formatVND, formatCNY, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import { OrderStatus } from "@/types";
+import { orderStore, OrderRecord } from "@/lib/order-store";
 
 interface DashboardStats {
   pending_deposit: number;
@@ -70,127 +71,52 @@ export default function CustomerDashboardPage() {
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
 
   useEffect(() => {
-    async function loadDashboard() {
-      setLoading(true);
-      try {
-        let query = supabase
-          .from("orders")
-          .select("id, order_code, status, total_cny, total_vnd, deposit_amount, min_deposit_amount, contract_type, customer_note, created_at")
-          .order("created_at", { ascending: false });
+    function computeStatsFromOrders(orders: OrderRecord[]) {
+      const pendingDeposit = orders.filter((o) => o.status === 0);
+      const inTransit = orders.filter((o) => [7, 8, 9, 10].includes(o.status));
+      const readyPickup = orders.filter((o) => [11, 12].includes(o.status));
+      const completed = orders.filter((o) => o.status === 14);
 
-        if (user) {
-          query = query.eq("customer_id", user.id);
-        }
+      setStats({
+        pending_deposit: pendingDeposit.length,
+        pending_deposit_amount: pendingDeposit.reduce((s, o) => s + Number(o.min_deposit_amount || 0), 0),
+        in_transit: inTransit.length,
+        in_transit_amount: inTransit.reduce((s, o) => s + Number(o.total_vnd || 0), 0),
+        ready_pickup: readyPickup.length,
+        ready_pickup_amount: readyPickup.reduce((s, o) => s + Math.max(0, Number(o.total_vnd || 0) - Number(o.deposit_amount || o.paid_amount_vnd || 0)), 0),
+        total_orders: orders.length,
+        completed_orders: completed.length,
+      });
 
-        const { data: orders, error } = await query;
-
-        if (error) {
-          console.warn("Dashboard query error:", error.message);
-        }
-
-        if (orders && orders.length > 0) {
-          const pendingDeposit = orders.filter((o: any) => o.status === 0);
-          const inTransit = orders.filter((o: any) => [7, 9, 10].includes(o.status));
-          const readyPickup = orders.filter((o: any) => [11, 12].includes(o.status));
-          const completed = orders.filter((o: any) => o.status === 14);
-
-          setStats({
-            pending_deposit: pendingDeposit.length,
-            pending_deposit_amount: pendingDeposit.reduce((s: number, o: any) => s + Number(o.min_deposit_amount || 0), 0),
-            in_transit: inTransit.length,
-            in_transit_amount: inTransit.reduce((s: number, o: any) => s + Number(o.total_vnd || 0), 0),
-            ready_pickup: readyPickup.length,
-            ready_pickup_amount: readyPickup.reduce((s: number, o: any) => s + Number(o.total_vnd || 0) - Number(o.deposit_amount || 0), 0),
-            total_orders: orders.length,
-            completed_orders: completed.length,
-          });
-
-          setRecentOrders(
-            orders.slice(0, 5).map((o: any) => ({
-              id: o.id,
-              order_code: o.order_code,
-              status: o.status,
-              total_cny: Number(o.total_cny || 0),
-              total_vnd: Number(o.total_vnd || 0),
-              deposit_amount: Number(o.deposit_amount || 0),
-              min_deposit_amount: Number(o.min_deposit_amount || 0),
-              contract_type: o.contract_type || "Tiểu ngạch",
-              shop_name: "",
-              created_at: o.created_at,
-            }))
-          );
-        } else {
-          // Dữ liệu demo
-          setStats({
-            pending_deposit: 9,
-            pending_deposit_amount: 62992599,
-            in_transit: 88,
-            in_transit_amount: 12049015,
-            ready_pickup: 14,
-            ready_pickup_amount: 51251730,
-            total_orders: 155,
-            completed_orders: 20,
-          });
-
-          setRecentOrders([
-            {
-              id: "2596",
-              order_code: "MD2596",
-              status: 0,
-              total_cny: 9520,
-              total_vnd: 42520111,
-              deposit_amount: 0,
-              min_deposit_amount: 33098741,
-              contract_type: "Chính ngạch Ủy Thác",
-              shop_name: "TNHH Cơ Khí QC",
-              created_at: "2026-10-21T04:42:40.000Z",
-            },
-            {
-              id: "2588",
-              order_code: "MD2588",
-              status: 10,
-              total_cny: 2840,
-              total_vnd: 12450000,
-              deposit_amount: 10000000,
-              min_deposit_amount: 8715000,
-              contract_type: "Chính ngạch",
-              shop_name: "Taobao Flagship",
-              created_at: "2026-10-18T09:15:20.000Z",
-            },
-            {
-              id: "2572",
-              order_code: "MD2572",
-              status: 11,
-              total_cny: 5400,
-              total_vnd: 23800000,
-              deposit_amount: 20000000,
-              min_deposit_amount: 16660000,
-              contract_type: "Tiểu ngạch",
-              shop_name: "1688 OEM Factory",
-              created_at: "2026-10-15T14:30:00.000Z",
-            },
-            {
-              id: "2540",
-              order_code: "MD2540",
-              status: 14,
-              total_cny: 1200,
-              total_vnd: 5200000,
-              deposit_amount: 5200000,
-              min_deposit_amount: 3640000,
-              contract_type: "Tiểu ngạch",
-              shop_name: "Guangzhou Shoes",
-              created_at: "2026-10-10T08:20:00.000Z",
-            },
-          ]);
-        }
-      } catch (err) {
-        console.error("Dashboard load error:", err);
-      } finally {
-        setLoading(false);
-      }
+      setRecentOrders(
+        orders.slice(0, 6).map((o) => ({
+          id: o.id,
+          order_code: o.order_code,
+          status: o.status,
+          total_cny: Number(o.total_cny || 0),
+          total_vnd: Number(o.total_vnd || 0),
+          deposit_amount: Number(o.deposit_amount || o.paid_amount_vnd || 0),
+          min_deposit_amount: Number(o.min_deposit_amount || 0),
+          contract_type: o.contract_type || "Tiểu ngạch",
+          shop_name: o.items?.[0]?.shop_name || "Taobao/1688",
+          created_at: o.created_at,
+        }))
+      );
     }
 
-    loadDashboard();
+    // 1. Lấy dữ liệu ngay từ orderStore
+    const initialOrders = orderStore.getOrders();
+    computeStatsFromOrders(initialOrders);
+    setLoading(false);
+
+    // 2. Lắng nghe thay đổi thời gian thực
+    const unsubscribe = orderStore.subscribe((updatedOrders) => {
+      computeStatsFromOrders(updatedOrders);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, [user]);
 
   const activeUserCode = profile?.user_code || "NT2820";

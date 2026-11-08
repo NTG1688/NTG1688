@@ -19,8 +19,9 @@ import {
   Percent,
   CheckCircle2
 } from "lucide-react";
-import { formatVND, formatCNY } from "@/lib/utils";
+import { formatVND, formatCNY, formatDate } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { orderStore, StoredOrder } from "@/lib/order-store";
 
 export default function AdminReportsPage() {
   const supabase = createClient();
@@ -36,126 +37,31 @@ export default function AdminReportsPage() {
     endDate: "2026-10-31"
   });
 
-  // Dữ liệu bảng lợi nhuận theo từng đơn hàng (Từ Auto_Gemini data)
-  const orderProfitList = [
-    {
-      orderCode: "MD2596",
-      customer: "Nguyễn Văn Trung (NT2820)",
-      employee: "Lê Hoàng Thu",
-      role: "Mua hàng",
-      orderDate: "21/10/2026",
-      revenueVnd: 42520111,
-      costVnd: 36069900,
-      profitVnd: 6450211,
-      marginPercent: 15.2,
-      commissionVnd: 645021, // 10% hoa hồng purchaser
-      status: "Chờ cọc"
-    },
-    {
-      orderCode: "MD2591",
-      customer: "Nguyễn Văn Trung (NT2820)",
-      employee: "Nguyễn Văn Hùng",
-      role: "Mua hàng",
-      orderDate: "20/10/2026",
-      revenueVnd: 21950000,
-      costVnd: 19100000,
-      profitVnd: 2850000,
-      marginPercent: 13.0,
-      commissionVnd: 285000,
-      status: "Đã cọc"
-    },
-    {
-      orderCode: "MD2585",
-      customer: "Phạm Hồng Quân (NT1920)",
-      employee: "Lê Hoàng Thu",
-      role: "Mua hàng",
-      orderDate: "18/10/2026",
-      revenueVnd: 28450000,
-      costVnd: 24700000,
-      profitVnd: 3750000,
-      marginPercent: 13.2,
-      commissionVnd: 375000,
-      status: "Đang mua"
-    },
-    {
-      orderCode: "MD2584",
-      customer: "Trần Mai Anh (NT3005)",
-      employee: "Trần Quốc Đạt",
-      role: "Mua hàng",
-      orderDate: "17/10/2026",
-      revenueVnd: 54800000,
-      costVnd: 48100000,
-      profitVnd: 6700000,
-      marginPercent: 12.2,
-      commissionVnd: 670000,
-      status: "Đã mua"
-    },
-    {
-      orderCode: "MD2581",
-      customer: "Thu Nguyễn (NT1102)",
-      employee: "Lê Hoàng Thu",
-      role: "Mua hàng",
-      orderDate: "16/10/2026",
-      revenueVnd: 27955642,
-      costVnd: 24200000,
-      profitVnd: 3755642,
-      marginPercent: 13.4,
-      commissionVnd: 375564,
-      status: "Về VN"
-    },
-    {
-      orderCode: "MD2529",
-      customer: "Đỗ Gia Huy (NT2219)",
-      employee: "Nguyễn Văn Hùng",
-      role: "Mua hàng",
-      orderDate: "10/10/2026",
-      revenueVnd: 78500000,
-      costVnd: 69200000,
-      profitVnd: 9300000,
-      marginPercent: 11.8,
-      commissionVnd: 930000,
-      status: "Kho VN"
-    },
-    {
-      orderCode: "MD2398",
-      customer: "Lê Minh Tuấn (NT1408)",
-      employee: "Lê Hoàng Thu",
-      role: "Mua hàng",
-      orderDate: "25/09/2026",
-      revenueVnd: 132400000,
-      costVnd: 116500000,
-      profitVnd: 15900000,
-      marginPercent: 12.0,
-      commissionVnd: 1590000,
-      status: "Hoàn thành"
-    },
-    {
-      orderCode: "MD2308",
-      customer: "Hoàng Đức Duy (NT1888)",
-      employee: "Nguyễn Văn Hùng",
-      role: "Mua hàng",
-      orderDate: "12/09/2026",
-      revenueVnd: 104200000,
-      costVnd: 91700000,
-      profitVnd: 12500000,
-      marginPercent: 12.0,
-      commissionVnd: 1250000,
-      status: "Hoàn thành"
-    },
-    {
-      orderCode: "MD1986",
-      customer: "Tinox Logistics (NT0401)",
-      employee: "Lê Hoàng Thu",
-      role: "Mua hàng",
-      orderDate: "05/08/2026",
-      revenueVnd: 178500000,
-      costVnd: 157200000,
-      profitVnd: 21300000,
-      marginPercent: 11.9,
-      commissionVnd: 2130000,
-      status: "Hoàn thành"
+  // Dữ liệu bảng lợi nhuận theo từng đơn hàng (Được load động từ Order Store)
+  const [orders, setOrders] = useState<StoredOrder[]>([]);
+
+  useEffect(() => {
+    function load() {
+      setOrders(orderStore.getOrders());
     }
-  ];
+    load();
+    window.addEventListener("NTG_ORDERS_UPDATED", load);
+    return () => window.removeEventListener("NTG_ORDERS_UPDATED", load);
+  }, []);
+
+  const orderProfitList = orders.map((o) => ({
+    orderCode: o.order_code,
+    customer: `${o.customer_name} (${o.customer_code})`,
+    employee: o.purchaser_name?.split("(")[0]?.trim() || "Lê Hoàng Thu",
+    role: "Mua hàng",
+    orderDate: formatDate(o.created_at),
+    revenueVnd: o.total_vnd,
+    costVnd: o.total_cost_vnd,
+    profitVnd: o.gross_profit_vnd,
+    marginPercent: o.profit_rate_percent,
+    commissionVnd: Math.round(o.gross_profit_vnd * 0.1),
+    status: o.status === 0 ? "Chờ cọc" : o.status === 1 ? "Đã cọc" : o.status === 14 ? "Hoàn thành" : `Bước ${o.status}`
+  }));
 
   // Lọc danh sách theo filter
   const filteredProfitList = orderProfitList.filter((item) => {

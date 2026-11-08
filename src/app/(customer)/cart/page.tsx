@@ -21,6 +21,7 @@ import {
 import { formatVND, formatCNY } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
+import { orderStore } from "@/lib/order-store";
 
 interface CartShopGroup {
   shopName: string;
@@ -246,44 +247,62 @@ export default function CartPage() {
 
     setIsSubmitting(true);
     try {
-      const orderCode = `NTG-ORD-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const randomNum = Math.floor(2700 + Math.random() * 100);
+      const orderCode = `MD${randomNum}`;
 
-      if (user) {
-        const { data: order } = await supabase.from("orders").insert({
-          order_code: orderCode,
-          customer_id: user.id,
-          status: 0,
-          order_type: "order",
-          exchange_rate: exchangeRate,
-          total_cny: totalCny,
-          total_vnd: totalEstimatedVnd,
-          deposit_amount: 0,
-          min_deposit_amount: minDepositVnd,
-          remaining_amount: totalEstimatedVnd,
-          fee_buy: feeBuy,
-          fee_check: feeCheck,
-          fee_wood: feeWood,
-          fee_insurance: feeInsurance,
-          contract_type: "Tiểu ngạch",
-        }).select().single();
+      const formattedItems = selectedItems.map((it, idx) => ({
+        id: `it_cart_${Date.now()}_${idx}`,
+        order_id: orderCode,
+        title: it.item_title,
+        link: it.item_url || "https://detail.1688.com",
+        shop_name: it.shop_name,
+        shop_id: "shop_cart",
+        image_url: it.item_image || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=150&q=80",
+        properties: it.properties || "Mặc định",
+        quantity: it.quantity,
+        quantity_received: 0,
+        price_cny: it.price_cny,
+        price_real_cny: it.price_cny,
+        discount_cny: 0,
+        total_cny: it.price_cny * it.quantity,
+        total_cost_cny: it.price_cny * it.quantity,
+        weight_kg: 0,
+        customer_note: it.note || "",
+        internal_note: "",
+        status: 0,
+      }));
 
-        if (order?.id) {
-          const itemsToInsert = selectedItems.map((it) => ({
-            order_id: order.id,
-            title: it.item_title,
-            source_url: it.item_url,
-            property_desc: it.properties,
-            price_cny: it.price_cny,
-            quantity: it.quantity,
-            image_url: it.item_image,
-            customer_note: it.note,
-          }));
-          await supabase.from("order_items").insert(itemsToInsert);
-        }
-      }
+      orderStore.createOrder({
+        id: orderCode,
+        order_code: orderCode,
+        customer_id: user?.id || "cust-01",
+        customer_name: user?.email ? user.email.split("@")[0] : "Khách Hàng NTG",
+        customer_code: "NT2820",
+        customer_phone: "0988776655",
+        status: 0,
+        order_type: "order",
+        contract_type: "Tiểu ngạch",
+        exchange_rate: exchangeRate,
+        real_exchange_rate: exchangeRate - 35,
+        total_cny: totalCny,
+        total_cost_cny: totalCny,
+        total_vnd: totalEstimatedVnd,
+        deposit_amount: 0,
+        min_deposit_amount: minDepositVnd,
+        remaining_amount: totalEstimatedVnd,
+        fee_buy: feeBuy,
+        fee_check: feeCheck,
+        fee_wood: feeWood,
+        fee_insurance: feeInsurance,
+        items: formattedItems,
+        tracking_codes: [],
+      });
 
-      alert(`Đã tạo thành công đơn hàng ${orderCode}! Hệ thống chuyển bạn về trang quản lý đơn.`);
-      router.push("/orders");
+      // Xoá các mặt hàng đã tạo đơn khỏi giỏ
+      setCartItems(cartItems.filter((it) => !it.selected));
+
+      alert(`Đã tạo thành công đơn hàng ${orderCode}! Hệ thống chuyển bạn về chi tiết đơn.`);
+      router.push(`/orders/${orderCode}`);
     } catch (err: any) {
       alert("Lỗi tạo đơn: " + err.message);
     } finally {
