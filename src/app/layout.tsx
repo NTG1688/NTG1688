@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/lib/auth-context";
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
@@ -32,7 +33,9 @@ export default function RootLayout({
   return (
     <html lang="vi" className={inter.variable}>
       <body className="font-sans min-h-screen bg-slate-50 flex flex-col">
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
